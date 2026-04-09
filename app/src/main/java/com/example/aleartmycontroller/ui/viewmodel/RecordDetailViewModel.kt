@@ -47,7 +47,7 @@ class RecordDetailViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(isLoading = true)
             runCatching {
                 val record = recordRepository.findRecordById(recordId)
-                    ?: throw IllegalArgumentException("Record not found")
+                    ?: throw IllegalArgumentException("レコードが見つかりません")
                 val event = eventRepository.findById(record.eventId)
                 val photos = recordRepository.getPhotosForRecord(recordId)
                 val memos = recordRepository.getMemosForRecord(recordId)

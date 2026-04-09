@@ -79,7 +79,7 @@ fun AppNavHost(initialEventId: Long? = null) {
                     floatingActionButton = {
                         FloatingActionButton(
                             onClick = {
-                                navController.navigate(Screen.RecordList.route) {
+                                navController.navigate(Screen.RecordList.createRoute()) {
                                     popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                                     launchSingleTop = true
                                     restoreState = true

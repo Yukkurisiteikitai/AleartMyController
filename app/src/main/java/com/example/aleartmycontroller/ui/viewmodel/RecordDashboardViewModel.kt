@@ -9,6 +9,7 @@ import com.example.aleartmycontroller.data.local.entity.RecordEntity
 import com.example.aleartmycontroller.data.repository.EventRepository
 import com.example.aleartmycontroller.data.repository.RecordRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -40,9 +41,10 @@ class RecordDashboardViewModel @Inject constructor(
         observeCurrentEvent()
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     private fun observeCurrentEvent() {
         viewModelScope.launch {
-            eventRepository.observeOngoingEvent().collect { event ->
+            eventRepository.observeOngoingEvent().collectLatest { event ->
                 val now = System.currentTimeMillis()
                 val rule = if (event != null) {
                     val durationMs = event.endTime - event.startTime
@@ -51,7 +53,10 @@ class RecordDashboardViewModel @Inject constructor(
                 } else ""
                 
                 val progress = if (event != null) {
-                    ((now - event.startTime).toFloat() / (event.endTime - event.startTime)).coerceIn(0f, 1f)
+                    val durationMs = event.endTime - event.startTime
+                    if (durationMs > 0) {
+                        ((now - event.startTime).toFloat() / durationMs).coerceIn(0f, 1f)
+                    } else 0f
                 } else 0f
 
                 _uiState.update { it.copy(
@@ -59,39 +64,31 @@ class RecordDashboardViewModel @Inject constructor(
                     observationRule = rule,
                     progress = progress
                 ) }
-                
-                if (event != null) {
-                    observeRecordsForEvent(event.eventId)
-                } else {
-                    _uiState.update { it.copy(recentRecords = emptyList()) }
-                }
             }
+        }
+
+        // 進行中イベントのレコードを監視 (N+1問題を回避したクエリを使用)
+        viewModelScope.launch {
+            eventRepository.observeOngoingEvent()
+                .flatMapLatest { event ->
+                    if (event != null) {
+                        recordRepository.observeRecordsByEventWithAttachments(event.eventId)
+                    } else {
+                        flowOf(emptyList())
+                    }
+                }
+                .collect { recordWithAttachments ->
+                    _uiState.update { state ->
+                        state.copy(
+                            recentRecords = recordWithAttachments.map { it.record }.reversed(),
+                            photosByRecord = recordWithAttachments.associate { it.record.recordId to it.photos },
+                            memosByRecord = recordWithAttachments.associate { it.record.recordId to it.memos }
+                        )
+                    }
+                }
         }
     }
 
-    private fun observeRecordsForEvent(eventId: Long) {
-        viewModelScope.launch {
-            recordRepository.observeRecordsByEvent(eventId).collect { records ->
-                _uiState.update { it.copy(recentRecords = records.reversed()) }
-                records.forEach { record ->
-                    loadAttachments(record.recordId)
-                }
-            }
-        }
-    }
-
-    private fun loadAttachments(recordId: Long) {
-        viewModelScope.launch {
-            val photos = recordRepository.getPhotosForRecord(recordId)
-            val memos = recordRepository.getMemosForRecord(recordId)
-            _uiState.update { state ->
-                state.copy(
-                    photosByRecord = state.photosByRecord + (recordId to photos),
-                    memosByRecord = state.memosByRecord + (recordId to memos)
-                )
-            }
-        }
-    }
 
     private var timerJob: kotlinx.coroutines.Job? = null
     private var startTimeMillis: Long = 0
@@ -116,12 +113,13 @@ class RecordDashboardViewModel @Inject constructor(
 
     fun manualStartEvent(eventId: Long) {
         viewModelScope.launch {
+            // Note: DBを監視しているため、eventIdを指定して開始しても
+            // observeOngoingEvent() が更新を検知して自動的にUIが切り替わるはず
             val event = eventRepository.findById(eventId)
             if (event != null) {
                 _uiState.update { it.copy(currentEvent = event, isTimerRunning = true) }
                 startTimeMillis = System.currentTimeMillis()
                 startTicker()
-                observeRecordsForEvent(eventId)
             }
         }
     }

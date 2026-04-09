@@ -45,7 +45,7 @@ interface EventDao {
     @Query("SELECT * FROM events WHERE startTime <= :now AND endTime > :now LIMIT 1")
     suspend fun findOngoing(now: Long): EventEntity?
 
-    @Query("SELECT * FROM events WHERE startTime <= :now AND endTime > :now")
+    @Query("SELECT * FROM events WHERE startTime <= :now AND endTime > :now ORDER BY startTime DESC LIMIT 1")
     fun observeOngoing(now: Long): Flow<EventEntity?>
 
     /** 古いキャッシュを削除（同期時に使用） */

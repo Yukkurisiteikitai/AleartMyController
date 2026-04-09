@@ -5,8 +5,10 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import com.example.aleartmycontroller.data.local.entity.RecordEntity
 import com.example.aleartmycontroller.data.local.entity.RecordType
+import com.example.aleartmycontroller.data.local.entity.RecordWithAttachments
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -18,13 +20,19 @@ interface RecordDao {
     @Delete
     suspend fun delete(record: RecordEntity)
 
-    /** イベントに紐づく記録を時刻順で監視 */
+    /** イベントに紐づく記録を時刻順で監視（添付ファイル込み） */
+    @Transaction
     @Query("SELECT * FROM records WHERE eventId = :eventId ORDER BY recordTime ASC")
-    fun observeByEvent(eventId: Long): Flow<List<RecordEntity>>
+    fun observeByEventWithAttachments(eventId: Long): Flow<List<RecordWithAttachments>>
 
     /** すべての記録を最新順で監視（全履歴表示用） */
     @Query("SELECT * FROM records ORDER BY recordTime DESC")
     fun observeAll(): Flow<List<RecordEntity>>
+
+    /** すべての記録を最新順で監視（添付ファイル込み） */
+    @Transaction
+    @Query("SELECT * FROM records ORDER BY recordTime DESC")
+    fun observeAllWithAttachments(): Flow<List<RecordWithAttachments>>
 
     @Query("SELECT * FROM records WHERE recordId = :id")
     suspend fun findById(id: Long): RecordEntity?

@@ -7,6 +7,7 @@ import com.example.aleartmycontroller.data.local.entity.MemoEntity
 import com.example.aleartmycontroller.data.local.entity.PhotoEntity
 import com.example.aleartmycontroller.data.local.entity.RecordEntity
 import com.example.aleartmycontroller.data.local.entity.RecordType
+import com.example.aleartmycontroller.data.local.entity.RecordWithAttachments
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -20,8 +21,14 @@ class RecordRepository @Inject constructor(
     fun observeRecordsByEvent(eventId: Long): Flow<List<RecordEntity>> =
         recordDao.observeByEvent(eventId)
 
+    fun observeRecordsByEventWithAttachments(eventId: Long): Flow<List<RecordWithAttachments>> =
+        recordDao.observeByEventWithAttachments(eventId)
+
     fun observeAllRecords(): Flow<List<RecordEntity>> =
         recordDao.observeAll()
+
+    fun observeAllRecordsWithAttachments(): Flow<List<RecordWithAttachments>> =
+        recordDao.observeAllWithAttachments()
 
     suspend fun findRecordById(recordId: Long): RecordEntity? =
         recordDao.findById(recordId)
