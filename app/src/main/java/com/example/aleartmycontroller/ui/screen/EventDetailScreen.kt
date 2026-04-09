@@ -30,6 +30,7 @@ import androidx.compose.ui.layout.ContentScale
 fun EventDetailScreen(
     onBack: () -> Unit,
     onAddRecord: (Long) -> Unit,
+    onRecordClick: (Long) -> Unit,
     viewModel: EventDetailViewModel = hiltViewModel()
 ) {
     val uiState   by viewModel.uiState.collectAsStateWithLifecycle()
@@ -82,7 +83,7 @@ fun EventDetailScreen(
                     records = records,
                     photosByRecord = uiState.photosByRecord,
                     memosByRecord = uiState.memosByRecord,
-                    onLoadAttachments = viewModel::loadAttachments
+                    onRecordClick = onRecordClick
                 )
             }
         }
@@ -95,17 +96,21 @@ private fun TimelineRecordList(
     records: List<RecordEntity>,
     photosByRecord: Map<Long, List<PhotoEntity>>,
     memosByRecord: Map<Long, List<MemoEntity>>,
-    onLoadAttachments: (Long) -> Unit
+    onRecordClick: (Long) -> Unit
 ) {
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         items(records, key = { it.recordId }) { record ->
-            LaunchedEffect(record.recordId) { onLoadAttachments(record.recordId) }
             val photos = photosByRecord[record.recordId] ?: emptyList()
             val memos = memosByRecord[record.recordId] ?: emptyList()
-            RecordTimelineItem(record = record, photos = photos, memos = memos)
+            RecordTimelineItem(
+                record = record,
+                photos = photos,
+                memos = memos,
+                onClick = { onRecordClick(record.recordId) }
+            )
         }
     }
 }
@@ -115,7 +120,8 @@ private fun TimelineRecordList(
 private fun RecordTimelineItem(
     record: RecordEntity,
     photos: List<PhotoEntity>,
-    memos: List<MemoEntity>
+    memos: List<MemoEntity>,
+    onClick: () -> Unit
 ) {
     val icon = when (record.recordType) {
         RecordType.PHOTO -> Icons.Default.CameraAlt
@@ -126,7 +132,8 @@ private fun RecordTimelineItem(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
         ),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

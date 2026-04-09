@@ -13,3 +13,7 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# IDE & Build logs
+/.idea/vcs.xml
+.kotlin/

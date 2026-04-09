@@ -42,4 +42,15 @@ class TogglRepository @Inject constructor(
             togglApi.createTimeEntry(me.defaultWorkspaceId, request)
         }
     }
+
+    /**
+     * 現在進行中のエントリを停止する。
+     */
+    suspend fun stopCurrentRunningEntry() {
+        if (BuildConfig.TOGGL_API_TOKEN.isBlank()) return
+        runCatching {
+            val current = togglApi.getCurrentTimeEntry() ?: return@runCatching
+            togglApi.stopTimeEntry(current.workspaceId, current.id)
+        }
+    }
 }

@@ -60,6 +60,18 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- WorkManager の自動初期化を無効化（Hilt によるカスタム初期化を行うため） -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
+
     </application>
 
 </manifest>
