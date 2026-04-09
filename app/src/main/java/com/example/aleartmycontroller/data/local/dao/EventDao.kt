@@ -41,6 +41,13 @@ interface EventDao {
     @Query("SELECT * FROM events WHERE googleEventId = :googleId")
     suspend fun findByGoogleId(googleId: String): EventEntity?
 
+    /** 現在時刻に進行中のイベントを取得する */
+    @Query("SELECT * FROM events WHERE startTime <= :now AND endTime > :now LIMIT 1")
+    suspend fun findOngoing(now: Long): EventEntity?
+
+    @Query("SELECT * FROM events WHERE startTime <= :now AND endTime > :now")
+    fun observeOngoing(now: Long): Flow<EventEntity?>
+
     /** 古いキャッシュを削除（同期時に使用） */
     @Query("DELETE FROM events WHERE googleEventId NOT IN (:activeGoogleIds)")
     suspend fun deleteStaleEvents(activeGoogleIds: List<String>)

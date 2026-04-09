@@ -20,6 +20,12 @@ class RecordRepository @Inject constructor(
     fun observeRecordsByEvent(eventId: Long): Flow<List<RecordEntity>> =
         recordDao.observeByEvent(eventId)
 
+    fun observeAllRecords(): Flow<List<RecordEntity>> =
+        recordDao.observeAll()
+
+    suspend fun findRecordById(recordId: Long): RecordEntity? =
+        recordDao.findById(recordId)
+
     /** 写真記録を追加する (record + photo を同一トランザクション内で保存) */
     suspend fun addPhotoRecord(eventId: Long, filePath: String): Long {
         val record = RecordEntity(

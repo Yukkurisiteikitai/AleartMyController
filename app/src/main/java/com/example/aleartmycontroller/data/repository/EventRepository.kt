@@ -45,18 +45,16 @@ class EventRepository @Inject constructor(
             timeMax = weekLater.format(isoFormatter)
         )
 
-        val entities = response.items.map { item ->
-            val startMillis = OffsetDateTime.parse(item.start.value, isoFormatter)
-                .toInstant().toEpochMilli()
-            val endMillis = OffsetDateTime.parse(item.end.value, isoFormatter)
-                .toInstant().toEpochMilli()
+        val entities = response.items.mapNotNull { item ->
+            val startMillis = item.start?.value?.let { OffsetDateTime.parse(it, isoFormatter).toInstant().toEpochMilli() } ?: return@mapNotNull null
+            val endMillis = item.end?.value?.let { OffsetDateTime.parse(it, isoFormatter).toInstant().toEpochMilli() } ?: return@mapNotNull null
             EventEntity(
                 googleEventId = item.id,
                 title = item.summary ?: "(無題)",
                 startTime = startMillis,
                 endTime = endMillis
             )
-        }
+        }.associateBy { it.googleEventId }.values.toList() // 重複除去：同じ Google ID なら後勝ちで上書き
 
         // DB に upsert してから不要なエントリを削除
         eventDao.upsertAll(entities)
@@ -67,4 +65,12 @@ class EventRepository @Inject constructor(
     }
 
     suspend fun findById(id: Long): EventEntity? = eventDao.findById(id)
+
+    fun observeOngoingEvent(): Flow<EventEntity?> {
+        return eventDao.observeOngoing(System.currentTimeMillis())
+    }
+
+    suspend fun getOngoingEvent(): EventEntity? {
+        return eventDao.findOngoing(System.currentTimeMillis())
+    }
 }

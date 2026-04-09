@@ -18,9 +18,12 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.Scope
 import androidx.compose.ui.platform.LocalContext
 
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.Icons
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
+    onBack: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
@@ -49,7 +52,16 @@ fun SettingsScreen(
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("設定", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) }) }
+        topBar = { 
+            TopAppBar(
+                title = { Text("設定", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "戻る")
+                    }
+                }
+            ) 
+        }
     ) { padding ->
         LazyColumn(
             modifier = Modifier
@@ -123,6 +135,7 @@ fun SettingsScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PresetGrid(
     presets: List<Int>,

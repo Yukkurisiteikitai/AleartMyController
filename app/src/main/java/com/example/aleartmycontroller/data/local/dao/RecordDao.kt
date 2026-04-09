@@ -22,6 +22,10 @@ interface RecordDao {
     @Query("SELECT * FROM records WHERE eventId = :eventId ORDER BY recordTime ASC")
     fun observeByEvent(eventId: Long): Flow<List<RecordEntity>>
 
+    /** すべての記録を最新順で監視（全履歴表示用） */
+    @Query("SELECT * FROM records ORDER BY recordTime DESC")
+    fun observeAll(): Flow<List<RecordEntity>>
+
     @Query("SELECT * FROM records WHERE recordId = :id")
     suspend fun findById(id: Long): RecordEntity?
 
