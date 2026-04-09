@@ -3,9 +3,6 @@
 Google Calendar の予定に対して、実際の行動ログ（写真・テキストメモ・音声メモ）を記録し、振り返りを支援する Android アプリです。  
 Toggl Track 連携により、記録操作に合わせて時間エントリを作成できます。  
 
-[動作イメージ動画](https://youtube.com/shorts/7I6kWMSqAbs)
-![](https://youtube.com/shorts/7I6kWMSqAbs)
-
 ## 概要
 
 - 予定データ: Google Calendar から取得
