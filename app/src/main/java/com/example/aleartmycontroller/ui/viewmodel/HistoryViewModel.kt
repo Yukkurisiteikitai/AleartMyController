@@ -7,13 +7,9 @@ import com.example.aleartmycontroller.data.local.entity.PhotoEntity
 import com.example.aleartmycontroller.data.local.entity.RecordEntity
 import com.example.aleartmycontroller.data.repository.RecordRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 import javax.inject.Inject
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 
 data class HistoryUiState(
     val photosByRecord: Map<Long, List<PhotoEntity>> = emptyMap(),
@@ -27,7 +23,8 @@ class HistoryViewModel @Inject constructor(
 ) : ViewModel() {
 
     val allRecords: StateFlow<List<RecordEntity>> = recordRepository
-        .observeAllRecords()
+        .observeAllRecordsWithAttachments()
+        .map { list -> list.map { it.record } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val _uiState = MutableStateFlow(HistoryUiState())
@@ -37,16 +34,17 @@ class HistoryViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(isRecordView = !_uiState.value.isRecordView)
     }
 
-    fun loadAttachments(recordId: Long) {
+    init {
+        observeAttachments()
+    }
+
+    private fun observeAttachments() {
         viewModelScope.launch {
-            if (_uiState.value.photosByRecord.containsKey(recordId)) return@launch
-            
-            val photos = recordRepository.getPhotosForRecord(recordId)
-            val memos = recordRepository.getMemosForRecord(recordId)
-            _uiState.value = _uiState.value.copy(
-                photosByRecord = _uiState.value.photosByRecord + (recordId to photos),
-                memosByRecord  = _uiState.value.memosByRecord  + (recordId to memos)
-            )
+            recordRepository.observeAllRecordsWithAttachments().collectLatest { list ->
+                val photos = list.associate { it.record.recordId to it.photos }
+                val memos = list.associate { it.record.recordId to it.memos }
+                _uiState.update { it.copy(photosByRecord = photos, memosByRecord = memos) }
+            }
         }
     }
 }

@@ -1,7 +1,6 @@
 package com.example.aleartmycontroller.data.remote.toggl
 
-import retrofit2.http.GET
-import retrofit2.http.Query
+import retrofit2.http.*
 
 /**
  * Toggl Track REST API v9
@@ -27,10 +26,19 @@ interface TogglApi {
         @Query("end_date") endDate: String
     ): List<TogglTimeEntry>
 
-    @retrofit2.http.POST("workspaces/{workspace_id}/time_entries")
+    @POST("workspaces/{workspace_id}/time_entries")
     suspend fun createTimeEntry(
-        @retrofit2.http.Path("workspace_id") workspaceId: Long,
-        @retrofit2.http.Body request: TogglTimeEntryRequest
+        @Path("workspace_id") workspaceId: Long,
+        @Body request: TogglTimeEntryRequest
+    ): TogglTimeEntry
+
+    @GET("me/time_entries/current")
+    suspend fun getCurrentTimeEntry(): TogglTimeEntry?
+
+    @PATCH("workspaces/{workspace_id}/time_entries/{time_entry_id}/stop")
+    suspend fun stopTimeEntry(
+        @Path("workspace_id") workspaceId: Long,
+        @Path("time_entry_id") timeEntryId: Long
     ): TogglTimeEntry
 
     companion object {

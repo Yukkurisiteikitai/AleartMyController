@@ -10,13 +10,9 @@ import com.example.aleartmycontroller.data.local.entity.RecordEntity
 import com.example.aleartmycontroller.data.repository.EventRepository
 import com.example.aleartmycontroller.data.repository.RecordRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 import javax.inject.Inject
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 
 /** イベント詳細画面のUI状態 */
 data class EventDetailUiState(
@@ -35,7 +31,8 @@ class EventDetailViewModel @Inject constructor(
     private val eventId: Long = checkNotNull(savedStateHandle["eventId"])
 
     val records: StateFlow<List<RecordEntity>> = recordRepository
-        .observeRecordsByEvent(eventId)
+        .observeRecordsByEventWithAttachments(eventId)
+        .map { list -> list.map { it.record } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val _uiState = MutableStateFlow(EventDetailUiState())
@@ -43,23 +40,23 @@ class EventDetailViewModel @Inject constructor(
 
     init {
         loadEvent()
+        observeAttachments()
     }
 
     private fun loadEvent() {
         viewModelScope.launch {
             val event = eventRepository.findById(eventId)
-            _uiState.value = _uiState.value.copy(event = event)
+            _uiState.update { it.copy(event = event) }
         }
     }
 
-    fun loadAttachments(recordId: Long) {
+    private fun observeAttachments() {
         viewModelScope.launch {
-            val photos = recordRepository.getPhotosForRecord(recordId)
-            val memos = recordRepository.getMemosForRecord(recordId)
-            _uiState.value = _uiState.value.copy(
-                photosByRecord = _uiState.value.photosByRecord + (recordId to photos),
-                memosByRecord  = _uiState.value.memosByRecord  + (recordId to memos)
-            )
+            recordRepository.observeRecordsByEventWithAttachments(eventId).collectLatest { list ->
+                val photos = list.associate { it.record.recordId to it.photos }
+                val memos = list.associate { it.record.recordId to it.memos }
+                _uiState.update { it.copy(photosByRecord = photos, memosByRecord = memos) }
+            }
         }
     }
 }

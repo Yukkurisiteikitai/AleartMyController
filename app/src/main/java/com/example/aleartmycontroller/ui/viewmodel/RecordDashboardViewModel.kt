@@ -8,9 +8,18 @@ import com.example.aleartmycontroller.data.local.entity.PhotoEntity
 import com.example.aleartmycontroller.data.local.entity.RecordEntity
 import com.example.aleartmycontroller.data.repository.EventRepository
 import com.example.aleartmycontroller.data.repository.RecordRepository
+import com.example.aleartmycontroller.data.repository.TogglRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -31,11 +40,14 @@ data class RecordDashboardUiState(
 @HiltViewModel
 class RecordDashboardViewModel @Inject constructor(
     private val eventRepository: EventRepository,
-    private val recordRepository: RecordRepository
+    private val recordRepository: RecordRepository,
+    private val togglRepository: TogglRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(RecordDashboardUiState())
     val uiState: StateFlow<RecordDashboardUiState> = _uiState.asStateFlow()
+
+    private val manualEventId = MutableStateFlow<Long?>(null)
 
     init {
         observeCurrentEvent()
@@ -43,8 +55,17 @@ class RecordDashboardViewModel @Inject constructor(
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private fun observeCurrentEvent() {
+        val manualEventFlow = manualEventId.flatMapLatest { id ->
+            flow { emit(id?.let { eventRepository.findById(it) }) }
+        }
+
         viewModelScope.launch {
-            eventRepository.observeOngoingEvent().collectLatest { event ->
+            combine(
+                eventRepository.observeOngoingEvent(),
+                manualEventFlow
+            ) { ongoing, manual ->
+                manual ?: ongoing
+            }.collectLatest { event ->
                 val now = System.currentTimeMillis()
                 val rule = if (event != null) {
                     val durationMs = event.endTime - event.startTime
@@ -67,25 +88,28 @@ class RecordDashboardViewModel @Inject constructor(
             }
         }
 
-        // 進行中イベントのレコードを監視 (N+1問題を回避したクエリを使用)
+        // 進行中イベントのレコードを監視
         viewModelScope.launch {
-            eventRepository.observeOngoingEvent()
-                .flatMapLatest { event ->
-                    if (event != null) {
-                        recordRepository.observeRecordsByEventWithAttachments(event.eventId)
-                    } else {
-                        flowOf(emptyList())
-                    }
+            combine(
+                eventRepository.observeOngoingEvent(),
+                manualEventFlow
+            ) { ongoing, manual ->
+                manual ?: ongoing
+            }.flatMapLatest { event ->
+                if (event != null) {
+                    recordRepository.observeRecordsByEventWithAttachments(event.eventId)
+                } else {
+                    flowOf(emptyList())
                 }
-                .collect { recordWithAttachments ->
-                    _uiState.update { state ->
-                        state.copy(
-                            recentRecords = recordWithAttachments.map { it.record }.reversed(),
-                            photosByRecord = recordWithAttachments.associate { it.record.recordId to it.photos },
-                            memosByRecord = recordWithAttachments.associate { it.record.recordId to it.memos }
-                        )
-                    }
+            }.collect { recordWithAttachments ->
+                _uiState.update { state ->
+                    state.copy(
+                        recentRecords = recordWithAttachments.map { it.record }.reversed(),
+                        photosByRecord = recordWithAttachments.associate { it.record.recordId to it.photos },
+                        memosByRecord = recordWithAttachments.associate { it.record.recordId to it.memos }
+                    )
                 }
+            }
         }
     }
 
@@ -100,10 +124,24 @@ class RecordDashboardViewModel @Inject constructor(
         if (newState) {
             startTimeMillis = System.currentTimeMillis()
             startTicker()
+            
+            // Toggl 開始
+            viewModelScope.launch {
+                val event = _uiState.value.currentEvent
+                if (event != null) {
+                    togglRepository.createEntry(description = event.title, tags = listOf("Observation"))
+                }
+            }
         } else {
             timerJob?.cancel()
             // タイマー停止時に経過時間をリセットし、もしノートがあればそれを保存する等の処理を検討可能
             _uiState.update { it.copy(elapsedTimeText = "00:00:00") }
+            manualEventId.value = null // 手動開始モード解除
+            
+            // Toggl 停止
+            viewModelScope.launch {
+                togglRepository.stopCurrentRunningEntry()
+            }
         }
     }
 
@@ -112,14 +150,16 @@ class RecordDashboardViewModel @Inject constructor(
     }
 
     fun manualStartEvent(eventId: Long) {
+        manualEventId.value = eventId
+        _uiState.update { it.copy(isTimerRunning = true) }
+        startTimeMillis = System.currentTimeMillis()
+        startTicker()
+        
+        // Toggl 開始
         viewModelScope.launch {
-            // Note: DBを監視しているため、eventIdを指定して開始しても
-            // observeOngoingEvent() が更新を検知して自動的にUIが切り替わるはず
             val event = eventRepository.findById(eventId)
             if (event != null) {
-                _uiState.update { it.copy(currentEvent = event, isTimerRunning = true) }
-                startTimeMillis = System.currentTimeMillis()
-                startTicker()
+                togglRepository.createEntry(description = event.title, tags = listOf("Observation"))
             }
         }
     }

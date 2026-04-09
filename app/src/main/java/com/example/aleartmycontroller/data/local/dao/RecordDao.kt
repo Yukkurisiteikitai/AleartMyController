@@ -20,6 +20,10 @@ interface RecordDao {
     @Delete
     suspend fun delete(record: RecordEntity)
 
+    /** イベントに紐づく記録を時刻順で監視 */
+    @Query("SELECT * FROM records WHERE eventId = :eventId ORDER BY recordTime ASC")
+    fun observeByEvent(eventId: Long): Flow<List<RecordEntity>>
+
     /** イベントに紐づく記録を時刻順で監視（添付ファイル込み） */
     @Transaction
     @Query("SELECT * FROM records WHERE eventId = :eventId ORDER BY recordTime ASC")

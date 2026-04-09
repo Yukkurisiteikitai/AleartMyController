@@ -83,7 +83,6 @@ fun EventDetailScreen(
                     records = records,
                     photosByRecord = uiState.photosByRecord,
                     memosByRecord = uiState.memosByRecord,
-                    onLoadAttachments = viewModel::loadAttachments,
                     onRecordClick = onRecordClick
                 )
             }
@@ -97,7 +96,6 @@ private fun TimelineRecordList(
     records: List<RecordEntity>,
     photosByRecord: Map<Long, List<PhotoEntity>>,
     memosByRecord: Map<Long, List<MemoEntity>>,
-    onLoadAttachments: (Long) -> Unit,
     onRecordClick: (Long) -> Unit
 ) {
     LazyColumn(
@@ -105,7 +103,6 @@ private fun TimelineRecordList(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         items(records, key = { it.recordId }) { record ->
-            LaunchedEffect(record.recordId) { onLoadAttachments(record.recordId) }
             val photos = photosByRecord[record.recordId] ?: emptyList()
             val memos = memosByRecord[record.recordId] ?: emptyList()
             RecordTimelineItem(

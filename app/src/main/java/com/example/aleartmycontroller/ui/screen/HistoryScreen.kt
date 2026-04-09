@@ -79,7 +79,6 @@ fun HistoryScreen(
                         records = records,
                         photosByRecord = uiState.photosByRecord,
                         memosByRecord = uiState.memosByRecord,
-                        onLoadAttachments = historyViewModel::loadAttachments,
                         onRecordClick = onRecordClick
                     )
                 }
@@ -133,7 +132,6 @@ private fun GlobalRecordTimeline(
     records: List<RecordEntity>,
     photosByRecord: Map<Long, List<com.example.aleartmycontroller.data.local.entity.PhotoEntity>>,
     memosByRecord: Map<Long, List<com.example.aleartmycontroller.data.local.entity.MemoEntity>>,
-    onLoadAttachments: (Long) -> Unit,
     onRecordClick: (Long) -> Unit
 ) {
     LazyColumn(
@@ -141,7 +139,6 @@ private fun GlobalRecordTimeline(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         items(records, key = { it.recordId }) { record ->
-            LaunchedEffect(record.recordId) { onLoadAttachments(record.recordId) }
             HistoryRecordItem(
                 record = record,
                 photos = photosByRecord[record.recordId] ?: emptyList(),
