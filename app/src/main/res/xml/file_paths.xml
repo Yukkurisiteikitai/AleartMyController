@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    FileProvider で公開するパスの定義。
+    カメラ撮影画像は getExternalFilesDir(Environment.DIRECTORY_PICTURES) に保存する。
+    参考: https://developer.android.com/reference/androidx/core/content/FileProvider
+-->
+<paths>
+    <!-- 外部ストレージ (アプリ専用領域) の Pictures ディレクトリ -->
+    <external-files-path
+        name="camera_photos"
+        path="Pictures/" />
+    <!-- キャッシュディレクトリ (一時ファイル用) -->
+    <external-cache-path
+        name="cache"
+        path="." />
+</paths>
