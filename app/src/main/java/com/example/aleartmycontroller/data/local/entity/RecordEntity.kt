@@ -10,23 +10,24 @@ enum class RecordType { PHOTO, MEMO }
 
 /**
  * イベントに紐づく観察ログ1件。
- * event_id は EventEntity の外部キー。
+ * obsEventId は ObservationEventEntity の外部キー。
+ * EventEntity（Google Calendar キャッシュ）には依存しない。
  */
 @Entity(
     tableName = "records",
     foreignKeys = [
         ForeignKey(
-            entity = EventEntity::class,
-            parentColumns = ["eventId"],
-            childColumns = ["eventId"],
+            entity = ObservationEventEntity::class,
+            parentColumns = ["obsEventId"],
+            childColumns = ["obsEventId"],
             onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [Index("eventId")]
+    indices = [Index("obsEventId")]
 )
 data class RecordEntity(
     @PrimaryKey(autoGenerate = true) val recordId: Long = 0,
-    val eventId: Long,
+    val obsEventId: Long,
     val recordTime: Long,          // epoch millis
     val recordType: RecordType
 )

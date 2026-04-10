@@ -3,11 +3,11 @@ package com.example.aleartmycontroller.ui.viewmodel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.aleartmycontroller.data.local.entity.EventEntity
 import com.example.aleartmycontroller.data.local.entity.MemoEntity
+import com.example.aleartmycontroller.data.local.entity.ObservationEventEntity
 import com.example.aleartmycontroller.data.local.entity.PhotoEntity
 import com.example.aleartmycontroller.data.local.entity.RecordEntity
-import com.example.aleartmycontroller.data.repository.EventRepository
+import com.example.aleartmycontroller.data.repository.ObservationEventRepository
 import com.example.aleartmycontroller.data.repository.RecordRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,7 +18,7 @@ import javax.inject.Inject
 
 data class RecordDetailUiState(
     val record: RecordEntity? = null,
-    val event: EventEntity? = null,
+    val event: ObservationEventEntity? = null,
     val photos: List<PhotoEntity> = emptyList(),
     val memos: List<MemoEntity> = emptyList(),
     val isLoading: Boolean = false,
@@ -30,7 +30,7 @@ data class RecordDetailUiState(
 class RecordDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val recordRepository: RecordRepository,
-    private val eventRepository: EventRepository
+    private val observationEventRepository: ObservationEventRepository
 ) : ViewModel() {
 
     private val recordId: Long = checkNotNull(savedStateHandle["recordId"])
@@ -48,10 +48,10 @@ class RecordDetailViewModel @Inject constructor(
             runCatching {
                 val record = recordRepository.findRecordById(recordId)
                     ?: throw IllegalArgumentException("レコードが見つかりません")
-                val event = eventRepository.findById(record.eventId)
+                val event = observationEventRepository.findById(record.obsEventId)
                 val photos = recordRepository.getPhotosForRecord(recordId)
                 val memos = recordRepository.getMemosForRecord(recordId)
-                
+
                 _uiState.value = _uiState.value.copy(
                     record = record,
                     event = event,

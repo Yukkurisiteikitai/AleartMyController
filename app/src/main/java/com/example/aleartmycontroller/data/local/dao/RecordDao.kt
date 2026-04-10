@@ -20,13 +20,29 @@ interface RecordDao {
     @Delete
     suspend fun delete(record: RecordEntity)
 
-    /** イベントに紐づく記録を時刻順で監視 */
-    @Query("SELECT * FROM records WHERE eventId = :eventId ORDER BY recordTime ASC")
+    /**
+     * カレンダーイベントに紐づく記録を時刻順で監視。
+     * events → observation_events → records の JOIN で解決するため、
+     * 呼び出し側は引き続き EventEntity.eventId を渡せる。
+     */
+    @Query("""
+        SELECT r.* FROM records r
+        INNER JOIN observation_events oe ON r.obsEventId = oe.obsEventId
+        INNER JOIN events e ON e.googleEventId = oe.googleEventId
+        WHERE e.eventId = :eventId
+        ORDER BY r.recordTime ASC
+    """)
     fun observeByEvent(eventId: Long): Flow<List<RecordEntity>>
 
     /** イベントに紐づく記録を時刻順で監視（添付ファイル込み） */
     @Transaction
-    @Query("SELECT * FROM records WHERE eventId = :eventId ORDER BY recordTime ASC")
+    @Query("""
+        SELECT r.* FROM records r
+        INNER JOIN observation_events oe ON r.obsEventId = oe.obsEventId
+        INNER JOIN events e ON e.googleEventId = oe.googleEventId
+        WHERE e.eventId = :eventId
+        ORDER BY r.recordTime ASC
+    """)
     fun observeByEventWithAttachments(eventId: Long): Flow<List<RecordWithAttachments>>
 
     /** すべての記録を最新順で監視（全履歴表示用） */
@@ -42,20 +58,29 @@ interface RecordDao {
     suspend fun findById(id: Long): RecordEntity?
 
     /** イベントごとの記録数（写真・メモ別） */
-    @Query("SELECT COUNT(*) FROM records WHERE eventId = :eventId AND recordType = :type")
+    @Query("""
+        SELECT COUNT(*) FROM records r
+        INNER JOIN observation_events oe ON r.obsEventId = oe.obsEventId
+        INNER JOIN events e ON e.googleEventId = oe.googleEventId
+        WHERE e.eventId = :eventId AND r.recordType = :type
+    """)
     suspend fun countByType(eventId: Long, type: RecordType): Int
 
-    /** 写真記録の合計数（イベント一覧表示用） */
-    @Query(
-        """
-        SELECT r.eventId, 
+    /**
+     * 写真・メモの件数を一括取得（イベント一覧のバッジ表示用）。
+     * events → observation_events JOIN で解決するため、呼び出し側は EventEntity.eventId のリストを渡せる。
+     * RecordCountResult の eventId フィールドは EventEntity.eventId に対応する。
+     */
+    @Query("""
+        SELECT e.eventId,
                SUM(CASE WHEN r.recordType = 'PHOTO' THEN 1 ELSE 0 END) AS photoCount,
                SUM(CASE WHEN r.recordType = 'MEMO'  THEN 1 ELSE 0 END) AS memoCount
-        FROM records r
-        WHERE r.eventId IN (:eventIds)
-        GROUP BY r.eventId
-        """
-    )
+        FROM events e
+        LEFT JOIN observation_events oe ON oe.googleEventId = e.googleEventId
+        LEFT JOIN records r ON r.obsEventId = oe.obsEventId
+        WHERE e.eventId IN (:eventIds)
+        GROUP BY e.eventId
+    """)
     suspend fun countByEvents(eventIds: List<Long>): List<RecordCountResult>
 }
 
