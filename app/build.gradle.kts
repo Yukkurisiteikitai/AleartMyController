@@ -108,6 +108,9 @@ dependencies {
     // Accompanist Permissions
     implementation(libs.accompanist.permissions)
 
+    // Vico charts
+    implementation(libs.vico.compose.m3)
+
     // Hilt
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)

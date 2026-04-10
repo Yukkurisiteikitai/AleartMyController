@@ -3,6 +3,7 @@ package com.example.aleartmycontroller.di
 import android.content.Context
 import androidx.room.Room
 import com.example.aleartmycontroller.data.local.AppDatabase
+import com.example.aleartmycontroller.data.local.dao.AnalyticsDao
 import com.example.aleartmycontroller.data.local.dao.EventDao
 import com.example.aleartmycontroller.data.local.dao.MemoDao
 import com.example.aleartmycontroller.data.local.dao.PhotoDao
@@ -25,6 +26,7 @@ object DatabaseModule {
             .addMigrations(AppDatabase.MIGRATION_1_2)
             .build()
 
+    @Provides fun provideAnalyticsDao(db: AppDatabase): AnalyticsDao = db.analyticsDao()
     @Provides fun provideEventDao(db: AppDatabase): EventDao   = db.eventDao()
     @Provides fun provideRecordDao(db: AppDatabase): RecordDao = db.recordDao()
     @Provides fun providePhotoDao(db: AppDatabase): PhotoDao   = db.photoDao()

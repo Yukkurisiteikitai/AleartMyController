@@ -6,6 +6,7 @@ import androidx.room.TypeConverter
 import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.example.aleartmycontroller.data.local.dao.AnalyticsDao
 import com.example.aleartmycontroller.data.local.dao.EventDao
 import com.example.aleartmycontroller.data.local.dao.MemoDao
 import com.example.aleartmycontroller.data.local.dao.PhotoDao
@@ -35,6 +36,7 @@ class RecordTypeConverter {
 )
 @TypeConverters(RecordTypeConverter::class)
 abstract class AppDatabase : RoomDatabase() {
+    abstract fun analyticsDao(): AnalyticsDao
     abstract fun eventDao(): EventDao
     abstract fun recordDao(): RecordDao
     abstract fun photoDao(): PhotoDao

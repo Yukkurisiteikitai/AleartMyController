@@ -5,8 +5,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -35,8 +36,9 @@ fun AppNavHost(initialEventId: Long? = null) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
-    val showBottomBar = listOf(Screen.EventList.route, Screen.RecordList.route, Screen.History.route)
-        .any { route -> currentDestination?.hierarchy?.any { it.route == route } == true }
+    val showBottomBar = listOf(
+        Screen.EventList.route, Screen.RecordList.route, Screen.History.route, Screen.Analytics.route
+    ).any { route -> currentDestination?.hierarchy?.any { it.route == route } == true }
 
     Scaffold(
         bottomBar = {
@@ -61,13 +63,28 @@ fun AppNavHost(initialEventId: Long? = null) {
                         // 中央のスペース (FAB用)
                         Spacer(modifier = Modifier.weight(1f))
 
-                        // 右側: 履歴
+                        // 履歴
                         BottomNavItem(
                             label = "履歴",
                             icon = Icons.Default.History,
                             selected = currentDestination?.hierarchy?.any { it.route == Screen.History.route } == true,
                             onClick = {
                                 navController.navigate(Screen.History.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        // 分析
+                        BottomNavItem(
+                            label = "分析",
+                            icon = Icons.Default.BarChart,
+                            selected = currentDestination?.hierarchy?.any { it.route == Screen.Analytics.route } == true,
+                            onClick = {
+                                navController.navigate(Screen.Analytics.route) {
                                     popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                                     launchSingleTop = true
                                     restoreState = true
@@ -179,6 +196,9 @@ fun AppNavHost(initialEventId: Long? = null) {
                 RecordDetailScreen(
                     onBack = { navController.popBackStack() }
                 )
+            }
+            composable(Screen.Analytics.route) {
+                AnalyticsScreen()
             }
         }
     }

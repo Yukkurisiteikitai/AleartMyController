@@ -23,6 +23,14 @@ class TogglRepository @Inject constructor(
         return runCatching { togglApi.getTimeEntries(startDate = today, endDate = today) }.getOrDefault(emptyList())
     }
 
+    /**
+     * 指定期間の時間エントリを取得する。
+     */
+    suspend fun getEntriesForRange(startDate: String, endDate: String): List<com.example.aleartmycontroller.data.remote.toggl.TogglTimeEntry> {
+        if (BuildConfig.TOGGL_API_TOKEN.isBlank()) return emptyByNull()
+        return runCatching { togglApi.getTimeEntries(startDate = startDate, endDate = endDate) }.getOrDefault(emptyList())
+    }
+
     private fun emptyByNull() = emptyList<com.example.aleartmycontroller.data.remote.toggl.TogglTimeEntry>()
 
     /**
