@@ -66,6 +66,49 @@ MVVM + Repository + DI（Hilt）をベースにした構成です。
 - Background
   - WorkManager + Hilt Worker
 
+### DB ドメイン設計：カレンダーキャッシュとユーザー記録の分離
+
+`EventEntity`（Google Calendar キャッシュ）と `RecordEntity`（ユーザー記録）のライフサイクルを明示的に分離しています。
+
+**問題の背景**
+
+従来の設計では `RecordEntity.eventId` が `EventEntity` を `CASCADE` で参照していました。
+カレンダー同期（`syncFromCalendar`）は過去のイベントを削除するため、
+それに連鎖して写真・メモが消える「システム的データロス」が発生していました。
+
+**解決策：`ObservationEventEntity` の導入**
+
+```
+events（同期キャッシュ）  ←  自由に削除可
+        ↓ googleEventId（ソフト参照・FK制約なし）
+observation_events（永続スナップショット）
+        ↓ obsEventId（FK + CASCADE）
+records（ユーザー記録）
+```
+
+| テーブル | 所有者 | ライフサイクル |
+|---|---|---|
+| `events` | Google Calendar | 同期のたびに上書き・削除される |
+| `observation_events` | このアプリ | 観察開始時に一度作成され、削除されない |
+| `records` | ユーザー | `observation_events` に連鎖し、ユーザー操作でのみ削除される |
+
+`ObservationEventEntity` は観察セッション開始時点でのイベント情報（タイトル・開始/終了時刻）を
+スナップショットとして保持します。カレンダー側のイベント名や日時が後から変更・削除されても影響を受けません。
+
+**DAOレイヤーの互換性維持**
+
+`RecordDao` の `observeByEvent(eventId: Long)` など既存のシグネチャは変更していません。
+内部クエリが `events → observation_events → records` の JOIN で解決するため、
+`EventListViewModel` や `EventDetailViewModel` は呼び出し方を変えずに動作します。
+
+**DB マイグレーション履歴**
+
+| バージョン | 内容 |
+|---|---|
+| 1 → 2 | `events.googleEventId` にユニークインデックスを追加 |
+| 2 → 3 | `observation_events` テーブルを新設し、records を持つ events を昇格 |
+| 3 → 4 | `records` テーブルを再作成し FK を `events → observation_events` へ切り替え |
+
 ## 技術スタック
 
 - Kotlin 2.0.21
@@ -153,8 +196,10 @@ TOGGL_API_TOKEN=YOUR_TOGGL_API_TOKEN
 app/src/main/java/com/example/aleartmycontroller/
   data/
     local/           # Room DB, DAO, Entity
+      dao/           # EventDao / ObservationEventDao / RecordDao / AnalyticsDao ...
+      entity/        # EventEntity / ObservationEventEntity / RecordEntity ...
     remote/          # Google/Toggl API
-    repository/      # Auth/Event/Record/Toggl
+    repository/      # EventRepository / ObservationEventRepository / RecordRepository / TogglRepository
     preferences/     # DataStore
   di/                # Hilt modules
   ui/

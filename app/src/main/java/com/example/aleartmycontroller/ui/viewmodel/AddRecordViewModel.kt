@@ -43,8 +43,10 @@ class AddRecordViewModel @Inject constructor(
     fun addPhoto(uri: Uri) {
         viewModelScope.launch {
             _uiState.value = AddRecordUiState.Loading
-            runCatching { 
-                recordRepository.addPhotoRecord(eventId, uri.toString())
+            runCatching {
+                val event = eventRepository.findById(eventId)
+                    ?: error("Event not found: $eventId")
+                recordRepository.addPhotoRecord(event, uri.toString())
                 logToToggl("Photo")
             }
                 .onSuccess { _uiState.value = AddRecordUiState.Success }
@@ -56,8 +58,10 @@ class AddRecordViewModel @Inject constructor(
         if (text.isBlank()) return
         viewModelScope.launch {
             _uiState.value = AddRecordUiState.Loading
-            runCatching { 
-                recordRepository.addMemoRecord(eventId, text, isVoice)
+            runCatching {
+                val event = eventRepository.findById(eventId)
+                    ?: error("Event not found: $eventId")
+                recordRepository.addMemoRecord(event, text, isVoice)
                 logToToggl(if (isVoice) "VoiceMemo" else "TextMemo")
             }
                 .onSuccess { _uiState.value = AddRecordUiState.Success }

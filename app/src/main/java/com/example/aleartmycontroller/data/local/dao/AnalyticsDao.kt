@@ -57,11 +57,11 @@ interface AnalyticsDao {
     suspend fun getRecordTypeBreakdown(fromMillis: Long): List<RecordTypeCount>
 
     @Query("""
-        SELECT e.title AS eventTitle, COUNT(r.recordId) AS recordCount
+        SELECT oe.title AS eventTitle, COUNT(r.recordId) AS recordCount
         FROM records r
-        INNER JOIN events e ON r.eventId = e.eventId
+        INNER JOIN observation_events oe ON r.obsEventId = oe.obsEventId
         WHERE r.recordTime >= :fromMillis
-        GROUP BY r.eventId
+        GROUP BY r.obsEventId
         ORDER BY recordCount DESC
         LIMIT 10
     """)

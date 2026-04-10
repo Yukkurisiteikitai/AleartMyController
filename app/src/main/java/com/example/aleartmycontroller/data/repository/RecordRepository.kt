@@ -3,6 +3,7 @@ package com.example.aleartmycontroller.data.repository
 import com.example.aleartmycontroller.data.local.dao.MemoDao
 import com.example.aleartmycontroller.data.local.dao.PhotoDao
 import com.example.aleartmycontroller.data.local.dao.RecordDao
+import com.example.aleartmycontroller.data.local.entity.EventEntity
 import com.example.aleartmycontroller.data.local.entity.MemoEntity
 import com.example.aleartmycontroller.data.local.entity.PhotoEntity
 import com.example.aleartmycontroller.data.local.entity.RecordEntity
@@ -16,8 +17,11 @@ import javax.inject.Singleton
 class RecordRepository @Inject constructor(
     private val recordDao: RecordDao,
     private val photoDao: PhotoDao,
-    private val memoDao: MemoDao
+    private val memoDao: MemoDao,
+    private val observationEventRepository: ObservationEventRepository
 ) {
+    // ---- 監視（呼び出し側は引き続き EventEntity.eventId を渡せる） ----
+
     fun observeRecordsByEvent(eventId: Long): Flow<List<RecordEntity>> =
         recordDao.observeByEvent(eventId)
 
@@ -33,10 +37,13 @@ class RecordRepository @Inject constructor(
     suspend fun findRecordById(recordId: Long): RecordEntity? =
         recordDao.findById(recordId)
 
-    /** 写真記録を追加する (record + photo を同一トランザクション内で保存) */
-    suspend fun addPhotoRecord(eventId: Long, filePath: String): Long {
+    // ---- 記録追加（EventEntity を受け取り、obsEventId を内部解決する） ----
+
+    /** 写真記録を追加する（record + photo を同一トランザクション内で保存） */
+    suspend fun addPhotoRecord(event: EventEntity, filePath: String): Long {
+        val obsEventId = observationEventRepository.findOrCreate(event)
         val record = RecordEntity(
-            eventId = eventId,
+            obsEventId = obsEventId,
             recordTime = System.currentTimeMillis(),
             recordType = RecordType.PHOTO
         )
@@ -47,12 +54,13 @@ class RecordRepository @Inject constructor(
 
     /** テキスト／音声メモ記録を追加する */
     suspend fun addMemoRecord(
-        eventId: Long,
+        event: EventEntity,
         text: String,
         isVoice: Boolean = false
     ): Long {
+        val obsEventId = observationEventRepository.findOrCreate(event)
         val record = RecordEntity(
-            eventId = eventId,
+            obsEventId = obsEventId,
             recordTime = System.currentTimeMillis(),
             recordType = RecordType.MEMO
         )
@@ -68,6 +76,8 @@ class RecordRepository @Inject constructor(
 
     suspend fun getMemosForRecord(recordId: Long): List<MemoEntity> =
         memoDao.findByRecord(recordId)
+
+    // ---- 集計（呼び出し側は引き続き EventEntity.eventId を渡せる） ----
 
     suspend fun countPhotos(eventId: Long): Int =
         recordDao.countByType(eventId, RecordType.PHOTO)

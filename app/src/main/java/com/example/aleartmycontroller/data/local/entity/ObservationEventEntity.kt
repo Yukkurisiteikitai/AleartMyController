@@ -1,6 +1,7 @@
 package com.example.aleartmycontroller.data.local.entity
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
@@ -16,7 +17,10 @@ import androidx.room.PrimaryKey
  * title / startTime / endTime は観察開始時点のスナップショット。
  * カレンダー側で後からイベント名や時間が変更されても影響を受けない。
  */
-@Entity(tableName = "observation_events")
+@Entity(
+    tableName = "observation_events",
+    indices = [Index(value = ["googleEventId"], unique = true)]
+)
 data class ObservationEventEntity(
     @PrimaryKey(autoGenerate = true) val obsEventId: Long = 0,
     val googleEventId: String?,  // soft reference — no FK to events table
