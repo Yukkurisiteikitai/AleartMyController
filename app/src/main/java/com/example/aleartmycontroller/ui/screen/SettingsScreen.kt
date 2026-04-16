@@ -30,6 +30,7 @@ fun SettingsScreen(
     val selectedInterval by viewModel.intervalMinutes.collectAsStateWithLifecycle()
     val notificationsEnabled by viewModel.notificationsEnabled.collectAsStateWithLifecycle()
     val customInterval by viewModel.customIntervalMinutes.collectAsStateWithLifecycle()
+    val yourselfLmSyncEnabled by viewModel.yourselfLmSyncEnabled.collectAsStateWithLifecycle()
     val userEmail by viewModel.userEmail.collectAsStateWithLifecycle()
     var showCustomDialog by remember { mutableStateOf(false) }
 
@@ -113,6 +114,28 @@ fun SettingsScreen(
                     onPresetSelected = { minutes ->
                         if (minutes == 0) showCustomDialog = true
                         else viewModel.selectInterval(minutes)
+                    }
+                )
+            }
+
+            item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
+
+            item {
+                Text(
+                    "YourselfLM 連携",
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
+            item {
+                ListItem(
+                    headlineContent = { Text("記録を外部サービスへ送信") },
+                    supportingContent = { Text("記録追加時に要約を送ります") },
+                    trailingContent = {
+                        Switch(
+                            checked = yourselfLmSyncEnabled,
+                            onCheckedChange = viewModel::toggleYourselfLmSync
+                        )
                     }
                 )
             }

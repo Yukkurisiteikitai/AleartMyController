@@ -43,6 +43,9 @@ class SettingsViewModel @Inject constructor(
     val customIntervalMinutes: StateFlow<Int> = prefs.customIntervalMinutes
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 30)
 
+    val yourselfLmSyncEnabled: StateFlow<Boolean> = prefs.yourselfLmSyncEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
     fun selectInterval(minutes: Int) {
         viewModelScope.launch { prefs.setIntervalMinutes(minutes) }
     }
@@ -60,5 +63,9 @@ class SettingsViewModel @Inject constructor(
             prefs.setCustomIntervalMinutes(minutes)
             prefs.setIntervalMinutes(minutes)
         }
+    }
+
+    fun toggleYourselfLmSync(enabled: Boolean) {
+        viewModelScope.launch { prefs.setYourselfLmSyncEnabled(enabled) }
     }
 }

@@ -3,6 +3,7 @@ package com.example.aleartmycontroller.di
 import com.example.aleartmycontroller.BuildConfig
 import com.example.aleartmycontroller.data.remote.google.GoogleCalendarApi
 import com.example.aleartmycontroller.data.remote.toggl.TogglApi
+import com.example.aleartmycontroller.data.remote.yourselflm.YourselfLmApi
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -18,6 +19,7 @@ import javax.inject.Singleton
 
 @Qualifier @Retention(AnnotationRetention.BINARY) annotation class CalendarRetrofit
 @Qualifier @Retention(AnnotationRetention.BINARY) annotation class TogglRetrofit
+@Qualifier @Retention(AnnotationRetention.BINARY) annotation class YourselfLmRetrofit
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -107,4 +109,35 @@ object NetworkModule {
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(TogglApi::class.java)
+
+    // ---- YourselfLM ----
+
+    @Provides
+    @Singleton
+    @YourselfLmRetrofit
+    fun provideYourselfLmOkHttpClient(
+        logging: HttpLoggingInterceptor
+    ): OkHttpClient =
+        OkHttpClient.Builder()
+            .addInterceptor(logging)
+            .addInterceptor { chain ->
+                val requestBuilder = chain.request().newBuilder()
+                if (BuildConfig.YOURSELF_LM_API_TOKEN.isNotBlank()) {
+                    requestBuilder.header("Authorization", "Bearer ${BuildConfig.YOURSELF_LM_API_TOKEN}")
+                }
+                chain.proceed(requestBuilder.build())
+            }
+            .build()
+
+    @Provides
+    @Singleton
+    fun provideYourselfLmApi(
+        @YourselfLmRetrofit client: OkHttpClient
+    ): YourselfLmApi =
+        Retrofit.Builder()
+            .baseUrl(BuildConfig.YOURSELF_LM_API_BASE_URL)
+            .client(client)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(YourselfLmApi::class.java)
 }

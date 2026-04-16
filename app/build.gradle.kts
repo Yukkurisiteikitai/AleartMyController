@@ -37,6 +37,16 @@ android {
             "TOGGL_API_TOKEN",
             "\"${localProperties.getProperty("TOGGL_API_TOKEN", "")}\""
         )
+        buildConfigField(
+            "String",
+            "YOURSELF_LM_API_BASE_URL",
+            "\"${localProperties.getProperty("YOURSELF_LM_API_BASE_URL", "https://yourselflm.invalid/")}\""
+        )
+        buildConfigField(
+            "String",
+            "YOURSELF_LM_API_TOKEN",
+            "\"${localProperties.getProperty("YOURSELF_LM_API_TOKEN", "")}\""
+        )
     }
 
     buildTypes {
