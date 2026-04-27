@@ -144,7 +144,7 @@ records（ユーザー記録）
 ```properties
 GOOGLE_CALENDAR_API_KEY=YOUR_GOOGLE_CALENDAR_API_KEY
 TOGGL_API_TOKEN=YOUR_TOGGL_API_TOKEN
-YOURSELF_LM_API_BASE_URL=https://your-backend.example.com/
+YOURSELF_LM_API_BASE_URL=https://www.yourselflm.org/
 YOURSELF_LM_API_TOKEN=YOUR_BACKEND_API_TOKEN
 ```
 
@@ -159,7 +159,7 @@ YOURSELF_LM_API_TOKEN=YOUR_BACKEND_API_TOKEN
 
 ### 3. YourselfLM 側の準備（任意）
 
-- バックエンド側に `POST /api/android/observations` を用意する
+- `https://www.yourselflm.org/` を利用する場合は `YOURSELF_LM_API_BASE_URL=https://www.yourselflm.org/` を設定する
 - `YOURSELF_LM_API_BASE_URL` と `YOURSELF_LM_API_TOKEN` を local.properties に設定する
 - Settings 画面で YourselfLM 送信を ON にする
 
@@ -255,4 +255,3 @@ app/src/main/java/com/example/aleartmycontroller/
 
 4. 設定画面
 ![](docs/settings.png)
-

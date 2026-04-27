@@ -1,15 +1,17 @@
 package com.example.aleartmycontroller.ui.util
 
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import com.example.aleartmycontroller.MainActivity
-import com.example.aleartmycontroller.R
 
 object NotificationHelper {
     private const val CHANNEL_ID = "observation_reminders"
@@ -28,31 +30,31 @@ object NotificationHelper {
     }
 
     fun showReminderNotification(context: Context, eventId: Long, title: String, content: String) {
-        // MainActivity を開くインテント
-        // eventId を渡して特定の画面へ遷移させる仕組みが必要
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED
+        ) return
+
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             putExtra("eventId", eventId)
         }
-        
+
         val pendingIntent: PendingIntent = PendingIntent.getActivity(
-            context, 
-            eventId.toInt(), 
-            intent, 
+            context,
+            eventId.toInt(),
+            intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_dialog_info) // 本来は専用アイコン
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText(content)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
 
-        with(NotificationManagerCompat.from(context)) {
-            // Android 13+ では通知権限が必要だが、ここでは簡易化のため通知発行のみ
-            notify(eventId.toInt(), builder.build())
-        }
+        NotificationManagerCompat.from(context).notify(eventId.toInt(), builder.build())
     }
 }

@@ -52,6 +52,19 @@ class RecordRepository @Inject constructor(
         return recordId
     }
 
+    /** 音声ファイルメモ記録を追加する */
+    suspend fun addAudioMemoRecord(event: EventEntity, audioFilePath: String): Long {
+        val obsEventId = observationEventRepository.findOrCreate(event)
+        val record = RecordEntity(
+            obsEventId = obsEventId,
+            recordTime = System.currentTimeMillis(),
+            recordType = RecordType.MEMO
+        )
+        val recordId = recordDao.insert(record)
+        memoDao.insert(MemoEntity(recordId = recordId, memoText = "", isVoiceMemo = true, audioFilePath = audioFilePath))
+        return recordId
+    }
+
     /** テキスト／音声メモ記録を追加する */
     suspend fun addMemoRecord(
         event: EventEntity,

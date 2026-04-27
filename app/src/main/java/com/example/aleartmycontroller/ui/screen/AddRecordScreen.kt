@@ -7,14 +7,19 @@ import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.AudioFile
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.*
@@ -31,6 +36,7 @@ import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.example.aleartmycontroller.ui.viewmodel.AddRecordUiState
 import com.example.aleartmycontroller.ui.viewmodel.AddRecordViewModel
+import com.example.aleartmycontroller.ui.viewmodel.RecordingState
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
@@ -40,9 +46,9 @@ fun AddRecordScreen(
     viewModel: AddRecordViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val recordingState by viewModel.recordingState.collectAsStateWithLifecycle()
     var memoText by remember { mutableStateOf("") }
 
-    // 成功したら画面を閉じる
     LaunchedEffect(uiState) {
         if (uiState is AddRecordUiState.Success) {
             viewModel.resetState()
@@ -50,11 +56,10 @@ fun AddRecordScreen(
         }
     }
 
-    // カメラ権限
     val cameraPermission = rememberPermissionState(Manifest.permission.CAMERA)
+    val audioPermission = rememberPermissionState(Manifest.permission.RECORD_AUDIO)
     val context = LocalContext.current
 
-    // カメラで撮影した画像URI
     var tempPhotoUri by remember { mutableStateOf<Uri?>(null) }
     val takePictureLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture()
@@ -64,14 +69,18 @@ fun AddRecordScreen(
         }
     }
 
-    // 画像ギャラリー選択
     val pickImageLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let { viewModel.addPhoto(it) }
     }
 
-    // 音声認識
+    val pickAudioLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let { viewModel.selectAudioFile(context, it) }
+    }
+
     val speechLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -100,7 +109,8 @@ fun AddRecordScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(24.dp),
+                .padding(24.dp)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             // ---- 写真セクション ----
@@ -198,6 +208,117 @@ fun AddRecordScreen(
                 }
             }
 
+            // ---- 音声録音セクション ----
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Mic, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary)
+                        Spacer(Modifier.width(8.dp))
+                        Text("音声を録音する", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    when (val rs = recordingState) {
+                        is RecordingState.Idle -> {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(
+                                    onClick = {
+                                        if (audioPermission.status.isGranted) {
+                                            viewModel.startRecording(context)
+                                        } else {
+                                            audioPermission.launchPermissionRequest()
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.tertiary
+                                    )
+                                ) {
+                                    Icon(Icons.Default.Mic, contentDescription = null)
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("録音開始")
+                                }
+                                OutlinedButton(
+                                    onClick = { pickAudioLauncher.launch("audio/*") },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(Icons.Default.AudioFile, contentDescription = null)
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("ファイルを選ぶ")
+                                }
+                            }
+                        }
+                        is RecordingState.Recording -> {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        color = MaterialTheme.colorScheme.error,
+                                        strokeWidth = 2.dp
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        text = formatDuration(rs.durationSeconds),
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                                FilledTonalButton(
+                                    onClick = { viewModel.stopRecording() },
+                                    colors = ButtonDefaults.filledTonalButtonColors(
+                                        containerColor = MaterialTheme.colorScheme.errorContainer
+                                    )
+                                ) {
+                                    Icon(Icons.Default.Stop, contentDescription = null)
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("停止")
+                                }
+                            }
+                        }
+                        is RecordingState.Recorded -> {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.tertiary
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = "録音完了 (${formatDuration(rs.durationSeconds)})",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(
+                                    onClick = { viewModel.saveAudioMemo() },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("保存")
+                                }
+                                OutlinedButton(
+                                    onClick = { viewModel.cancelRecording() },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("やり直し")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // ---- エラー表示 ----
             if (uiState is AddRecordUiState.Error) {
                 Text(
@@ -212,4 +333,10 @@ fun AddRecordScreen(
             }
         }
     }
+}
+
+private fun formatDuration(seconds: Int): String {
+    val m = seconds / 60
+    val s = seconds % 60
+    return "%02d:%02d".format(m, s)
 }

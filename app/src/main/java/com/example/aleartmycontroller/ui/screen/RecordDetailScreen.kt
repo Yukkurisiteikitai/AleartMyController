@@ -1,6 +1,6 @@
 package com.example.aleartmycontroller.ui.screen
 
-import androidx.compose.foundation.background
+import android.media.MediaPlayer
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -8,7 +8,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,9 +24,11 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.example.aleartmycontroller.data.local.entity.MemoEntity
 import com.example.aleartmycontroller.ui.util.toLocalDate
 import com.example.aleartmycontroller.ui.util.toLocalTime
 import com.example.aleartmycontroller.ui.viewmodel.RecordDetailViewModel
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -32,7 +38,6 @@ fun RecordDetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    // 削除成功時に戻る
     LaunchedEffect(uiState.isDeleted) {
         if (uiState.isDeleted) {
             onBack()
@@ -98,24 +103,29 @@ fun RecordDetailScreen(
                             Column(modifier = Modifier.padding(16.dp)) {
                                 if (uiState.memos.isNotEmpty()) {
                                     uiState.memos.forEach { memo ->
-                                        Text(
-                                            text = memo.memoText,
-                                            style = MaterialTheme.typography.bodyLarge,
-                                            modifier = Modifier.padding(bottom = 12.dp)
-                                        )
-                                        if (memo.isVoiceMemo) {
-                                            SuggestionChip(
-                                                onClick = {},
-                                                label = { Text("音声入力") },
-                                                enabled = false
-                                            )
+                                        if (memo.audioFilePath != null) {
+                                            AudioPlayerRow(memo)
+                                        } else {
+                                            if (memo.memoText.isNotBlank()) {
+                                                Text(
+                                                    text = memo.memoText,
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    modifier = Modifier.padding(bottom = 12.dp)
+                                                )
+                                            }
+                                            if (memo.isVoiceMemo) {
+                                                SuggestionChip(
+                                                    onClick = {},
+                                                    label = { Text("音声入力") },
+                                                    enabled = false
+                                                )
+                                            }
                                         }
                                     }
                                 }
-                                
+
                                 HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-                                
-                                // メタデータ
+
                                 MetadataRow(
                                     icon = Icons.Default.Schedule,
                                     label = "記録時刻",
@@ -135,7 +145,6 @@ fun RecordDetailScreen(
                 }
             }
 
-            // エラー表示
             if (uiState.errorMessage != null) {
                 AlertDialog(
                     onDismissRequest = viewModel::dismissError,
@@ -145,6 +154,76 @@ fun RecordDetailScreen(
                     title = { Text("エラー") },
                     text = { Text(uiState.errorMessage!!) }
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AudioPlayerRow(memo: MemoEntity) {
+    val filePath = memo.audioFilePath ?: return
+    var isPlaying by remember { mutableStateOf(false) }
+    val mediaPlayer = remember { MediaPlayer() }
+
+    DisposableEffect(filePath) {
+        runCatching {
+            mediaPlayer.setDataSource(filePath)
+            mediaPlayer.prepare()
+        }
+        mediaPlayer.setOnCompletionListener { isPlaying = false }
+        onDispose {
+            mediaPlayer.release()
+        }
+    }
+
+    Surface(
+        tonalElevation = 3.dp,
+        shape = MaterialTheme.shapes.small,
+        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Default.Mic,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.tertiary,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = "録音メモ",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(
+                onClick = {
+                    if (isPlaying) {
+                        mediaPlayer.pause()
+                        isPlaying = false
+                    } else {
+                        if (mediaPlayer.currentPosition == mediaPlayer.duration) {
+                            mediaPlayer.seekTo(0)
+                        }
+                        mediaPlayer.start()
+                        isPlaying = true
+                    }
+                }
+            ) {
+                Icon(
+                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    contentDescription = if (isPlaying) "一時停止" else "再生"
+                )
+            }
+            IconButton(
+                onClick = {
+                    mediaPlayer.pause()
+                    mediaPlayer.seekTo(0)
+                    isPlaying = false
+                }
+            ) {
+                Icon(Icons.Default.Stop, contentDescription = "停止")
             }
         }
     }

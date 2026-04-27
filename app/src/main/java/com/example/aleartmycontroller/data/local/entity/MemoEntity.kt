@@ -26,5 +26,6 @@ data class MemoEntity(
     @PrimaryKey(autoGenerate = true) val memoId: Long = 0,
     val recordId: Long,
     val memoText: String,
-    val isVoiceMemo: Boolean = false
+    val isVoiceMemo: Boolean = false,
+    val audioFilePath: String? = null
 )

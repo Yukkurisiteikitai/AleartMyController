@@ -40,7 +40,7 @@ android {
         buildConfigField(
             "String",
             "YOURSELF_LM_API_BASE_URL",
-            "\"${localProperties.getProperty("YOURSELF_LM_API_BASE_URL", "https://yourselflm.invalid/")}\""
+            "\"${localProperties.getProperty("YOURSELF_LM_API_BASE_URL", "https://www.yourselflm.org/")}\""
         )
         buildConfigField(
             "String",

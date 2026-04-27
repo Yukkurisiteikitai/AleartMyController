@@ -34,7 +34,7 @@ class RecordTypeConverter {
 @Database(
     entities = [EventEntity::class, RecordEntity::class, PhotoEntity::class, MemoEntity::class,
                 ObservationEventEntity::class],
-    version = 4,
+    version = 5,
     exportSchema = true
 )
 @TypeConverters(RecordTypeConverter::class)
@@ -142,6 +142,12 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL(
                     "CREATE INDEX IF NOT EXISTS `index_records_obsEventId` ON `records`(`obsEventId`)"
                 )
+            }
+        }
+
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE memos ADD COLUMN audioFilePath TEXT")
             }
         }
     }
