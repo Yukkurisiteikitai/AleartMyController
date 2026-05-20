@@ -23,10 +23,12 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.aleartmycontroller.ui.screen.*
+import com.example.aleartmycontroller.ui.components.NewDraftEventDialog
 
 @Composable
 fun AppNavHost(initialEventId: Long? = null) {
     val navController = rememberNavController()
+    var showDraftDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(initialEventId) {
         initialEventId?.let { id ->
@@ -95,13 +97,7 @@ fun AppNavHost(initialEventId: Long? = null) {
                     },
                     floatingActionButton = {
                         FloatingActionButton(
-                            onClick = {
-                                navController.navigate(Screen.RecordList.createRoute()) {
-                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
+                            onClick = { showDraftDialog = true },
                             containerColor = MaterialTheme.colorScheme.primary,
                             elevation = FloatingActionButtonDefaults.elevation(0.dp),
                             shape = CircleShape,
@@ -114,6 +110,20 @@ fun AppNavHost(initialEventId: Long? = null) {
             }
         }
     ) { innerPadding ->
+        if (showDraftDialog) {
+            NewDraftEventDialog(
+                onConfirm = { title ->
+                    showDraftDialog = false
+                    navController.navigate(Screen.RecordList.createRoute(draftTitle = title)) {
+                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                onDismiss = { showDraftDialog = false }
+            )
+        }
+
         NavHost(
             navController = navController,
             startDestination = Screen.EventList.route,
@@ -176,9 +186,13 @@ fun AppNavHost(initialEventId: Long? = null) {
                 route = Screen.RecordList.route,
                 arguments = listOf(navArgument("eventId") { 
                     type = NavType.LongType; defaultValue = -1L 
+                }, navArgument("draftTitle") {
+                    type = NavType.StringType
+                    defaultValue = ""
                 })
             ) { backStackEntry ->
                 val eventId = backStackEntry.arguments?.getLong("eventId")?.takeIf { it != -1L }
+                val draftTitle = backStackEntry.arguments?.getString("draftTitle")?.takeIf { it.isNotBlank() }
                 RecordDashboardScreen(
                     onAddRecord = { id ->
                         navController.navigate(Screen.AddRecord.createRoute(id))
@@ -186,7 +200,8 @@ fun AppNavHost(initialEventId: Long? = null) {
                     onRecordClick = { recordId ->
                         navController.navigate(Screen.RecordDetail.createRoute(recordId))
                     },
-                    initialEventId = eventId
+                    initialEventId = eventId,
+                    initialDraftTitle = draftTitle
                 )
             }
             composable(

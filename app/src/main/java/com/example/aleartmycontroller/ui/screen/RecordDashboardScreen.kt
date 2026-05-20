@@ -16,6 +16,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -36,14 +38,18 @@ fun RecordDashboardScreen(
     onAddRecord: (Long) -> Unit,
     onRecordClick: (Long) -> Unit,
     initialEventId: Long? = null,
+    initialDraftTitle: String? = null,
     viewModel: RecordDashboardViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val hapticFeedback = LocalHapticFeedback.current
 
-    LaunchedEffect(initialEventId) {
+    LaunchedEffect(initialEventId, initialDraftTitle) {
         initialEventId?.let { id ->
             viewModel.manualStartEvent(id)
+        } ?: initialDraftTitle?.let { title ->
+            viewModel.startDraftSession(title)
         }
     }
 
@@ -81,6 +87,12 @@ fun RecordDashboardScreen(
                         }
                     },
                     onLongPress = {
+                        if (uiState.isTimerRunning) {
+                            hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                            viewModel.requestStop()
+                        }
+                    },
+                    onDoublePress = {
                         if (uiState.isTimerRunning) {
                             viewModel.requestStop()
                         }
@@ -177,7 +189,8 @@ private fun RecordingControlBar(
     onNoteChange: (String) -> Unit,
     isRunning: Boolean,
     onShortPress: () -> Unit,
-    onLongPress: () -> Unit
+    onLongPress: () -> Unit,
+    onDoublePress: () -> Unit
 ) {
     Surface(
         tonalElevation = 8.dp,
@@ -212,7 +225,8 @@ private fun RecordingControlBar(
                     .background(if (isRunning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
                     .combinedClickable(
                         onClick = onShortPress,
-                        onLongClick = onLongPress
+                        onLongClick = onLongPress,
+                        onDoubleClick = onDoublePress
                     ),
                 contentAlignment = Alignment.Center
             ) {

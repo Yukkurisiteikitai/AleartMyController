@@ -23,6 +23,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.aleartmycontroller.ui.model.EventWithCounts
 import com.example.aleartmycontroller.ui.util.toLocalDate
 import com.example.aleartmycontroller.ui.util.toLocalTime
+import com.example.aleartmycontroller.data.local.entity.isLocalDraft
 import com.example.aleartmycontroller.ui.viewmodel.EventListViewModel
 import com.example.aleartmycontroller.ui.viewmodel.EventListUiState
 
@@ -136,6 +137,20 @@ private fun EventListItem(
             overlineContent = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(event.startTime.toLocalDate(), style = MaterialTheme.typography.labelSmall)
+                    if (event.isLocalDraft()) {
+                        Spacer(Modifier.width(8.dp))
+                        Surface(
+                            color = MaterialTheme.colorScheme.tertiaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                            shape = MaterialTheme.shapes.small
+                        ) {
+                            Text(
+                                "下書き",
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
                     if (isCurrent) {
                         Spacer(Modifier.width(8.dp))
                         Surface(

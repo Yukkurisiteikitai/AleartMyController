@@ -5,6 +5,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.aleartmycontroller.data.repository.RecordRepository
+import com.example.aleartmycontroller.data.local.entity.isLocalDraft
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -63,6 +64,9 @@ class AddRecordViewModel @Inject constructor(
                     ?: error("Event not found: $eventId")
                 recordRepository.addMemoRecord(event, text, isVoice)
                 logToToggl(if (isVoice) "VoiceMemo" else "TextMemo")
+                if (!isVoice && !event.isLocalDraft()) {
+                    eventRepository.appendMemoToGoogleEvent(event, text)
+                }
             }
                 .onSuccess { _uiState.value = AddRecordUiState.Success }
                 .onFailure { _uiState.value = AddRecordUiState.Error(it.localizedMessage ?: "Unknown error") }

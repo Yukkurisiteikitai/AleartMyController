@@ -6,6 +6,7 @@ import com.example.aleartmycontroller.data.local.entity.EventEntity
 import com.example.aleartmycontroller.data.local.entity.MemoEntity
 import com.example.aleartmycontroller.data.local.entity.PhotoEntity
 import com.example.aleartmycontroller.data.local.entity.RecordEntity
+import com.example.aleartmycontroller.data.local.entity.isLocalDraft
 import com.example.aleartmycontroller.data.repository.EventRepository
 import com.example.aleartmycontroller.data.repository.RecordRepository
 import com.example.aleartmycontroller.data.repository.TogglRepository
@@ -126,6 +127,14 @@ class RecordDashboardViewModel @Inject constructor(
     private var timerJob: kotlinx.coroutines.Job? = null
     private var startTimeMillis: Long = 0
 
+    fun startDraftSession(title: String) {
+        if (_uiState.value.isTimerRunning) return
+        viewModelScope.launch {
+            val draftEvent = eventRepository.createDraftEvent(title)
+            manualStartEvent(draftEvent.eventId)
+        }
+    }
+
     fun startTimer() {
         if (_uiState.value.isTimerRunning) return
         _uiState.update { it.copy(isTimerRunning = true) }
@@ -143,23 +152,51 @@ class RecordDashboardViewModel @Inject constructor(
     }
 
     fun requestStop() {
-        if (!_uiState.value.isTimerRunning) return
+        val state = _uiState.value
+        val event = state.currentEvent ?: return
+        if (!state.isTimerRunning) return
+        val pendingNote = state.currentObservationNote.trim()
 
-        if (_uiState.value.recentRecords.isEmpty()) {
+        if (!event.isLocalDraft() && state.recentRecords.isEmpty() && pendingNote.isBlank()) {
             viewModelScope.launch {
                 _uiEvent.send(RecordDashboardUiEvent.ShowError("最低1つの証拠を追加してください"))
             }
             return
         }
 
-        _uiState.update { it.copy(isTimerRunning = false) }
-        timerJob?.cancel()
-        _uiState.update { it.copy(elapsedTimeText = "00:00:00") }
-        manualEventId.value = null // 手動開始モード解除
-        
-        // Toggl 停止
         viewModelScope.launch {
-            togglRepository.stopCurrentRunningEntry()
+            runCatching {
+                val memoTexts = state.memosByRecord.values.flatten().map { it.memoText }.toMutableList()
+
+                if (pendingNote.isNotBlank()) {
+                    recordRepository.addMemoRecord(event, pendingNote)
+                    memoTexts += pendingNote
+                    if (!event.isLocalDraft()) {
+                        eventRepository.appendMemoToGoogleEvent(event, pendingNote)
+                    }
+                }
+
+                if (event.isLocalDraft()) {
+                    eventRepository.finalizeDraftEvent(
+                        eventId = event.eventId,
+                        endTimeMillis = System.currentTimeMillis(),
+                        description = memoTexts.takeIf { it.isNotEmpty() }?.joinToString("\n\n")
+                    )
+                }
+                togglRepository.stopCurrentRunningEntry()
+            }.onSuccess {
+                _uiState.update {
+                    it.copy(
+                        isTimerRunning = false,
+                        elapsedTimeText = "00:00:00",
+                        currentObservationNote = ""
+                    )
+                }
+                timerJob?.cancel()
+                manualEventId.value = null
+            }.onFailure { error ->
+                _uiEvent.send(RecordDashboardUiEvent.ShowError(error.localizedMessage ?: "終了に失敗しました"))
+            }
         }
     }
 
