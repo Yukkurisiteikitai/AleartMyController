@@ -29,6 +29,10 @@ import com.example.aleartmycontroller.ui.util.toLocalTime
 import com.example.aleartmycontroller.ui.viewmodel.EventListViewModel
 import com.example.aleartmycontroller.ui.viewmodel.HistoryViewModel
 
+import com.example.aleartmycontroller.ui.components.EmptyStatePlaceholder
+import com.example.aleartmycontroller.ui.components.TimelineRecordItem
+import com.example.aleartmycontroller.ui.model.DomainRecord
+
 /**
  * 履歴画面: 過去のログを「イベント」または「記録（タイムライン）」単位で表示する。
  */
@@ -73,19 +77,25 @@ fun HistoryScreen(
             if (uiState.isRecordView) {
                 // 記録タイムライン表示
                 if (records.isEmpty()) {
-                    EmptyHistoryPlaceholder("まだ記録がありません")
+                    EmptyStatePlaceholder(
+                        icon = Icons.Default.History,
+                        title = "記録がありません",
+                        message = "まだ何も記録されていません。観察画面から新しい記録を追加してみましょう！"
+                    )
                 } else {
                     GlobalRecordTimeline(
                         records = records,
-                        photosByRecord = uiState.photosByRecord,
-                        memosByRecord = uiState.memosByRecord,
                         onRecordClick = onRecordClick
                     )
                 }
             } else {
                 // イベント履歴表示
                 if (events.isEmpty()) {
-                    EmptyHistoryPlaceholder("イベントの履歴がありません")
+                    EmptyStatePlaceholder(
+                        icon = Icons.Default.EventNote,
+                        title = "イベントがありません",
+                        message = "過去のイベント履歴がここに表示されます。"
+                    )
                 } else {
                     LazyColumn(contentPadding = PaddingValues(vertical = 8.dp)) {
                         items(events, key = { it.event.eventId }) { item ->
@@ -95,17 +105,6 @@ fun HistoryScreen(
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun EmptyHistoryPlaceholder(message: String) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Default.History, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.outline)
-            Spacer(Modifier.height(16.dp))
-            Text(message, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.outline)
         }
     }
 }
@@ -129,78 +128,20 @@ private fun HistoryEventItem(event: EventEntity, onClick: () -> Unit) {
 
 @Composable
 private fun GlobalRecordTimeline(
-    records: List<RecordEntity>,
-    photosByRecord: Map<Long, List<com.example.aleartmycontroller.data.local.entity.PhotoEntity>>,
-    memosByRecord: Map<Long, List<com.example.aleartmycontroller.data.local.entity.MemoEntity>>,
+    records: List<DomainRecord>,
     onRecordClick: (Long) -> Unit
 ) {
     LazyColumn(
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        contentPadding = PaddingValues(vertical = 16.dp),
+        modifier = Modifier.fillMaxSize()
     ) {
-        items(records, key = { it.recordId }) { record ->
-            HistoryRecordItem(
+        items(records.size, key = { records[it].id }) { index ->
+            val record = records[index]
+            TimelineRecordItem(
                 record = record,
-                photos = photosByRecord[record.recordId] ?: emptyList(),
-                memos = memosByRecord[record.recordId] ?: emptyList(),
-                onClick = { onRecordClick(record.recordId) }
+                isLastItem = index == records.lastIndex,
+                onClick = { onRecordClick(record.id) }
             )
-        }
-    }
-}
-
-@Composable
-private fun HistoryRecordItem(
-    record: RecordEntity,
-    photos: List<com.example.aleartmycontroller.data.local.entity.PhotoEntity>,
-    memos: List<com.example.aleartmycontroller.data.local.entity.MemoEntity>,
-    onClick: () -> Unit
-) {
-    val icon = when (record.recordType) {
-        RecordType.PHOTO -> Icons.Default.CameraAlt
-        RecordType.MEMO  -> Icons.Default.Notes
-    }
-
-    Card(
-        onClick = onClick,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(MaterialTheme.shapes.small)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                if (record.recordType == RecordType.PHOTO && photos.isNotEmpty()) {
-                    AsyncImage(
-                        model = photos.first().filePath,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                }
-            }
-            
-            Spacer(Modifier.width(16.dp))
-            
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = if (record.recordType == RecordType.PHOTO) "写真の記録" else (memos.firstOrNull()?.memoText?.take(20) ?: "メモの記録"),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1
-                )
-                Text(
-                    text = "${record.recordTime.toLocalDate()} ${record.recordTime.toLocalTime()}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
         }
     }
 }

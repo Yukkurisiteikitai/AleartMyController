@@ -25,6 +25,7 @@ object DatabaseModule {
     fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, AppDatabase.DATABASE_NAME)
             .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4)
+            .fallbackToDestructiveMigrationOnDowngrade()
             .build()
 
     @Provides fun provideAnalyticsDao(db: AppDatabase): AnalyticsDao           = db.analyticsDao()
