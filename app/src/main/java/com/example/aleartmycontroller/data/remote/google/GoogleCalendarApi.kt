@@ -1,6 +1,9 @@
 package com.example.aleartmycontroller.data.remote.google
 
+import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.PATCH
+import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
 
@@ -13,6 +16,12 @@ import retrofit2.http.Query
  * 初期版は calendarId=primary で API Key のみを使用する。
  */
 interface GoogleCalendarApi {
+
+    @GET("calendars/{calendarId}/events/{eventId}")
+    suspend fun getEvent(
+        @Path("calendarId") calendarId: String = "primary",
+        @Path("eventId") eventId: String
+    ): CalendarEvent
 
     /**
      * カレンダーのイベント一覧を取得する。
@@ -34,6 +43,19 @@ interface GoogleCalendarApi {
         @Query("orderBy") orderBy: String = "startTime",
         @Query("maxResults") maxResults: Int = 100
     ): CalendarEventsResponse
+
+    @POST("calendars/{calendarId}/events")
+    suspend fun insertEvent(
+        @Path("calendarId") calendarId: String = "primary",
+        @Body body: CalendarEventUpsertRequest
+    ): CalendarEvent
+
+    @PATCH("calendars/{calendarId}/events/{eventId}")
+    suspend fun patchEvent(
+        @Path("calendarId") calendarId: String = "primary",
+        @Path("eventId") eventId: String,
+        @Body body: CalendarEventPatchRequest
+    ): CalendarEvent
 
     companion object {
         const val BASE_URL = "https://www.googleapis.com/calendar/v3/"

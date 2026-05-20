@@ -49,6 +49,10 @@ interface EventDao {
     fun observeOngoing(now: Long): Flow<EventEntity?>
 
     /** 古いキャッシュを削除（同期時に使用） */
-    @Query("DELETE FROM events WHERE googleEventId NOT IN (:activeGoogleIds)")
+    @Query("""
+        DELETE FROM events
+        WHERE googleEventId NOT LIKE 'local-draft:%'
+          AND googleEventId NOT IN (:activeGoogleIds)
+    """)
     suspend fun deleteStaleEvents(activeGoogleIds: List<String>)
 }

@@ -2,6 +2,7 @@ package com.example.aleartmycontroller.ui.screen
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -15,6 +16,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -22,6 +25,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.aleartmycontroller.data.local.entity.EventEntity
 import com.example.aleartmycontroller.ui.util.toLocalTime
+import com.example.aleartmycontroller.ui.viewmodel.RecordDashboardUiEvent
 import com.example.aleartmycontroller.ui.viewmodel.RecordDashboardViewModel
 
 /**
@@ -34,17 +38,36 @@ fun RecordDashboardScreen(
     onAddRecord: (Long) -> Unit,
     onRecordClick: (Long) -> Unit,
     initialEventId: Long? = null,
+    initialDraftTitle: String? = null,
     viewModel: RecordDashboardViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val hapticFeedback = LocalHapticFeedback.current
 
-    LaunchedEffect(initialEventId) {
+    LaunchedEffect(initialEventId, initialDraftTitle) {
         initialEventId?.let { id ->
             viewModel.manualStartEvent(id)
+        } ?: initialDraftTitle?.let { title ->
+            viewModel.startDraftSession(title)
+        }
+    }
+
+    LaunchedEffect(viewModel) {
+        viewModel.uiEvent.collect { event ->
+            when (event) {
+                is RecordDashboardUiEvent.ShowError -> {
+                    snackbarHostState.showSnackbar(event.message)
+                }
+                is RecordDashboardUiEvent.ShowWarning -> {
+                    snackbarHostState.showSnackbar(event.message)
+                }
+            }
         }
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("証拠を記録", fontWeight = FontWeight.ExtraBold) },
@@ -59,7 +82,24 @@ fun RecordDashboardScreen(
                     noteValue = uiState.currentObservationNote,
                     onNoteChange = viewModel::updateNote,
                     isRunning = uiState.isTimerRunning,
-                    onToggle = { viewModel.toggleTimer() }
+                    onShortPress = {
+                        if (uiState.isTimerRunning) {
+                            uiState.currentEvent?.eventId?.let { onAddRecord(it) }
+                        } else {
+                            viewModel.startTimer()
+                        }
+                    },
+                    onLongPress = {
+                        if (uiState.isTimerRunning) {
+                            hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                            viewModel.requestStop()
+                        }
+                    },
+                    onDoublePress = {
+                        if (uiState.isTimerRunning) {
+                            viewModel.requestStop()
+                        }
+                    }
                 )
             }
         }
@@ -145,13 +185,15 @@ private fun TimerDisplay(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun RecordingControlBar(
     noteValue: String,
     onNoteChange: (String) -> Unit,
     isRunning: Boolean,
-    onToggle: () -> Unit
+    onShortPress: () -> Unit,
+    onLongPress: () -> Unit,
+    onDoublePress: () -> Unit
 ) {
     Surface(
         tonalElevation = 8.dp,
@@ -179,12 +221,17 @@ private fun RecordingControlBar(
                 singleLine = true
             )
             
-            IconButton(
-                onClick = onToggle,
+            Box(
                 modifier = Modifier
                     .size(56.dp)
                     .clip(CircleShape)
                     .background(if (isRunning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+                    .combinedClickable(
+                        onClick = onShortPress,
+                        onLongClick = onLongPress,
+                        onDoubleClick = onDoublePress
+                    ),
+                contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = if (isRunning) Icons.Default.Stop else Icons.Default.PlayArrow,

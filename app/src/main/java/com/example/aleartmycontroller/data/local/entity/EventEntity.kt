@@ -20,3 +20,7 @@ data class EventEntity(
     val startTime: Long,   // epoch millis
     val endTime: Long      // epoch millis
 )
+
+const val LOCAL_DRAFT_GOOGLE_ID_PREFIX = "local-draft:"
+
+fun EventEntity.isLocalDraft(): Boolean = googleEventId.startsWith(LOCAL_DRAFT_GOOGLE_ID_PREFIX)

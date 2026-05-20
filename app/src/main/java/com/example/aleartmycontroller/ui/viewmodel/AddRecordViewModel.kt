@@ -5,10 +5,13 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.aleartmycontroller.data.repository.RecordRepository
+import com.example.aleartmycontroller.data.local.entity.isLocalDraft
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -17,6 +20,10 @@ sealed interface AddRecordUiState {
     data object Loading : AddRecordUiState
     data object Success : AddRecordUiState
     data class Error(val message: String) : AddRecordUiState
+}
+
+sealed interface AddRecordUiEvent {
+    data class ShowWarning(val message: String) : AddRecordUiEvent
 }
 
 @HiltViewModel
@@ -31,6 +38,8 @@ class AddRecordViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow<AddRecordUiState>(AddRecordUiState.Idle)
     val uiState: StateFlow<AddRecordUiState> = _uiState.asStateFlow()
+    private val _uiEvent = Channel<AddRecordUiEvent>(Channel.BUFFERED)
+    val uiEvent = _uiEvent.receiveAsFlow()
 
     private suspend fun logToToggl(tag: String) {
         val event = eventRepository.findById(eventId) ?: return
@@ -58,13 +67,30 @@ class AddRecordViewModel @Inject constructor(
         if (text.isBlank()) return
         viewModelScope.launch {
             _uiState.value = AddRecordUiState.Loading
+            val event = eventRepository.findById(eventId)
+                ?: run {
+                    _uiState.value = AddRecordUiState.Error("Event not found: $eventId")
+                    return@launch
+                }
+
             runCatching {
-                val event = eventRepository.findById(eventId)
-                    ?: error("Event not found: $eventId")
                 recordRepository.addMemoRecord(event, text, isVoice)
                 logToToggl(if (isVoice) "VoiceMemo" else "TextMemo")
             }
-                .onSuccess { _uiState.value = AddRecordUiState.Success }
+                .onSuccess {
+                    if (!isVoice && !event.isLocalDraft()) {
+                        runCatching {
+                            eventRepository.appendMemoToGoogleEvent(event, text)
+                        }.onFailure {
+                            _uiEvent.send(
+                                AddRecordUiEvent.ShowWarning(
+                                    "Google カレンダーへのメモ追記に失敗しました"
+                                )
+                            )
+                        }
+                    }
+                    _uiState.value = AddRecordUiState.Success
+                }
                 .onFailure { _uiState.value = AddRecordUiState.Error(it.localizedMessage ?: "Unknown error") }
         }
     }

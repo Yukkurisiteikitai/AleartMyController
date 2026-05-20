@@ -85,7 +85,7 @@ fun SettingsScreen(
                         Button(onClick = {
                             val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
                                 .requestEmail()
-                                .requestScopes(Scope("https://www.googleapis.com/auth/calendar.events.readonly"))
+                                .requestScopes(Scope("https://www.googleapis.com/auth/calendar.events"))
                                 .build()
                             val client = GoogleSignIn.getClient(context, gso)
                             googleSignInLauncher.launch(client.signInIntent)

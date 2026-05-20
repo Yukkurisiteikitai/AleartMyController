@@ -1,12 +1,17 @@
 package com.example.aleartmycontroller.ui.navigation
 
+import android.net.Uri
+
 /** アプリ内ルート定義 */
 sealed class Screen(val route: String) {
     data object EventList   : Screen("event_list")
     data object History     : Screen("history")
-    data object RecordList  : Screen("record_list?eventId={eventId}") {
-        fun createRoute(eventId: Long? = null): String = 
-            if (eventId != null) "record_list?eventId=$eventId" else "record_list"
+    data object RecordList  : Screen("record_list?eventId={eventId}&draftTitle={draftTitle}") {
+        fun createRoute(eventId: Long? = null, draftTitle: String? = null): String {
+            val eventArg = eventId?.toString() ?: "-1"
+            val draftArg = draftTitle?.let(Uri::encode) ?: ""
+            return "record_list?eventId=$eventArg&draftTitle=$draftArg"
+        }
     }
     data object Settings    : Screen("settings")
 

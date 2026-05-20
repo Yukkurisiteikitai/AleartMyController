@@ -29,6 +29,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
+import kotlinx.coroutines.flow.collectLatest
 import com.example.aleartmycontroller.ui.viewmodel.AddRecordUiState
 import com.example.aleartmycontroller.ui.viewmodel.AddRecordViewModel
 import java.util.Locale
@@ -40,6 +41,7 @@ fun AddRecordScreen(
     viewModel: AddRecordViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
     var memoText by remember { mutableStateOf("") }
 
     // 成功したら画面を閉じる
@@ -47,6 +49,16 @@ fun AddRecordScreen(
         if (uiState is AddRecordUiState.Success) {
             viewModel.resetState()
             onBack()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.uiEvent.collectLatest { event ->
+            when (event) {
+                is com.example.aleartmycontroller.ui.viewmodel.AddRecordUiEvent.ShowWarning -> {
+                    snackbarHostState.showSnackbar(event.message)
+                }
+            }
         }
     }
 
@@ -82,6 +94,7 @@ fun AddRecordScreen(
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("記録を追加", fontWeight = FontWeight.Bold) },

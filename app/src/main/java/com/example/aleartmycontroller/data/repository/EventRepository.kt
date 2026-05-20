@@ -1,25 +1,38 @@
 package com.example.aleartmycontroller.data.repository
 
-import com.example.aleartmycontroller.BuildConfig
 import com.example.aleartmycontroller.data.local.dao.EventDao
+import com.example.aleartmycontroller.data.local.dao.ObservationEventDao
 import com.example.aleartmycontroller.data.local.entity.EventEntity
+import com.example.aleartmycontroller.data.local.entity.LOCAL_DRAFT_GOOGLE_ID_PREFIX
+import com.example.aleartmycontroller.data.local.entity.isLocalDraft
 import com.example.aleartmycontroller.data.remote.google.GoogleCalendarApi
+import com.example.aleartmycontroller.data.remote.google.CalendarEventDateTimeRequest
+import com.example.aleartmycontroller.data.remote.google.CalendarEventPatchRequest
+import com.example.aleartmycontroller.data.remote.google.CalendarEventUpsertRequest
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class EventRepository @Inject constructor(
     private val eventDao: EventDao,
+    private val observationEventDao: ObservationEventDao,
     private val calendarApi: GoogleCalendarApi
 ) {
     private val isoFormatter: DateTimeFormatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME
+    private val zoneId: ZoneId = ZoneId.systemDefault()
+    private val memoUpdateMutexes = ConcurrentHashMap<String, Mutex>()
 
     /** 今日以降のイベントをFlowで監視（ローカルDB） */
     fun observeUpcomingEvents(): Flow<List<EventEntity>> {
@@ -69,6 +82,79 @@ class EventRepository @Inject constructor(
 
     suspend fun findById(id: Long): EventEntity? = eventDao.findById(id)
 
+    suspend fun createDraftEvent(title: String): EventEntity {
+        val now = System.currentTimeMillis()
+        val draftEvent = EventEntity(
+            googleEventId = "$LOCAL_DRAFT_GOOGLE_ID_PREFIX${UUID.randomUUID()}",
+            title = title,
+            startTime = now,
+            endTime = now + 60 * 60 * 1000
+        )
+        val eventId = eventDao.upsert(draftEvent)
+        return draftEvent.copy(eventId = eventId)
+    }
+
+    suspend fun closeDraftEvent(
+        eventId: Long,
+        endTimeMillis: Long
+    ): EventEntity {
+        val draftEvent = eventDao.findById(eventId) ?: error("Event not found: $eventId")
+        require(draftEvent.isLocalDraft()) { "Not a draft event: ${draftEvent.googleEventId}" }
+
+        val closed = draftEvent.copy(endTime = endTimeMillis)
+        eventDao.upsert(closed)
+        return closed
+    }
+
+    suspend fun finalizeDraftEvent(
+        eventId: Long,
+        description: String?
+    ): EventEntity {
+        val draftEvent = eventDao.findById(eventId) ?: error("Event not found: $eventId")
+        require(draftEvent.isLocalDraft()) { "Not a draft event: ${draftEvent.googleEventId}" }
+
+        return memoUpdateMutexFor(draftEvent.googleEventId).withLock {
+            val inserted = calendarApi.insertEvent(
+                body = CalendarEventUpsertRequest(
+                    summary = draftEvent.title,
+                    description = description?.takeIf { it.isNotBlank() },
+                    start = toRequestTime(draftEvent.startTime),
+                    end = toRequestTime(draftEvent.endTime)
+                )
+            )
+
+            val finalized = draftEvent.copy(
+                googleEventId = inserted.id
+            )
+            eventDao.upsert(finalized)
+            observationEventDao.updateGoogleId(
+                oldGoogleId = draftEvent.googleEventId,
+                newGoogleId = inserted.id,
+                title = finalized.title,
+                startTime = finalized.startTime,
+                endTime = finalized.endTime
+            )
+            finalized
+        }
+    }
+
+    suspend fun appendMemoToGoogleEvent(event: EventEntity, memoText: String) {
+        if (memoText.isBlank() || event.isLocalDraft()) return
+
+        memoUpdateMutexFor(event.googleEventId).withLock {
+            val remote = calendarApi.getEvent(eventId = event.googleEventId)
+            val mergedDescription = listOfNotNull(
+                remote.description?.takeIf { it.isNotBlank() },
+                memoText.trim()
+            ).joinToString("\n\n")
+
+            calendarApi.patchEvent(
+                eventId = event.googleEventId,
+                body = CalendarEventPatchRequest(description = mergedDescription)
+            )
+        }
+    }
+
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     fun observeOngoingEvent(): Flow<EventEntity?> {
         // 1分ごとに現在時刻を更新して、進行中イベントを引き直す
@@ -85,5 +171,18 @@ class EventRepository @Inject constructor(
 
     suspend fun getOngoingEvent(): EventEntity? {
         return eventDao.findOngoing(System.currentTimeMillis())
+    }
+
+    private fun toRequestTime(millis: Long): CalendarEventDateTimeRequest {
+        val dateTime = OffsetDateTime.ofInstant(Instant.ofEpochMilli(millis), zoneId)
+            .format(isoFormatter)
+        return CalendarEventDateTimeRequest(
+            dateTime = dateTime,
+            timeZone = zoneId.id
+        )
+    }
+
+    private fun memoUpdateMutexFor(googleEventId: String): Mutex {
+        return memoUpdateMutexes.getOrPut(googleEventId) { Mutex() }
     }
 }

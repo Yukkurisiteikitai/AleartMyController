@@ -14,7 +14,7 @@ import javax.inject.Singleton
 class AuthRepository @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    private val scope = "oauth2:https://www.googleapis.com/auth/calendar.events.readonly"
+    private val scope = "oauth2:https://www.googleapis.com/auth/calendar.events"
 
     /**
      * 最後にサインインしたアカウントを取得する

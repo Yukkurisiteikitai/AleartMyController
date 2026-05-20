@@ -6,24 +6,18 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.aleartmycontroller.data.local.entity.RecordEntity
-import com.example.aleartmycontroller.data.local.entity.RecordType
 import com.example.aleartmycontroller.ui.util.toLocalTime
 import com.example.aleartmycontroller.ui.viewmodel.EventDetailViewModel
-import coil.compose.AsyncImage
-import com.example.aleartmycontroller.data.local.entity.MemoEntity
-import com.example.aleartmycontroller.data.local.entity.PhotoEntity
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
+import com.example.aleartmycontroller.ui.components.EmptyStatePlaceholder
+import com.example.aleartmycontroller.ui.components.TimelineRecordItem
+import com.example.aleartmycontroller.ui.model.DomainRecord
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,14 +69,14 @@ fun EventDetailScreen(
             }
 
             if (records.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
-                    Text("まだ記録がありません", style = MaterialTheme.typography.bodyMedium)
-                }
+                EmptyStatePlaceholder(
+                    icon = Icons.Default.Notes,
+                    title = "記録がありません",
+                    message = "このイベントにはまだ記録がありません。右下の＋ボタンから追加しましょう！"
+                )
             } else {
                 TimelineRecordList(
                     records = records,
-                    photosByRecord = uiState.photosByRecord,
-                    memosByRecord = uiState.memosByRecord,
                     onRecordClick = onRecordClick
                 )
             }
@@ -93,85 +87,20 @@ fun EventDetailScreen(
 
 @Composable
 private fun TimelineRecordList(
-    records: List<RecordEntity>,
-    photosByRecord: Map<Long, List<PhotoEntity>>,
-    memosByRecord: Map<Long, List<MemoEntity>>,
+    records: List<DomainRecord>,
     onRecordClick: (Long) -> Unit
 ) {
     LazyColumn(
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        contentPadding = PaddingValues(vertical = 16.dp),
+        modifier = Modifier.fillMaxSize()
     ) {
-        items(records, key = { it.recordId }) { record ->
-            val photos = photosByRecord[record.recordId] ?: emptyList()
-            val memos = memosByRecord[record.recordId] ?: emptyList()
-            RecordTimelineItem(
+        items(records.size, key = { records[it].id }) { index ->
+            val record = records[index]
+            TimelineRecordItem(
                 record = record,
-                photos = photos,
-                memos = memos,
-                onClick = { onRecordClick(record.recordId) }
+                isLastItem = index == records.lastIndex,
+                onClick = { onRecordClick(record.id) }
             )
-        }
-    }
-}
-
-
-@Composable
-private fun RecordTimelineItem(
-    record: RecordEntity,
-    photos: List<PhotoEntity>,
-    memos: List<MemoEntity>,
-    onClick: () -> Unit
-) {
-    val icon = when (record.recordType) {
-        RecordType.PHOTO -> Icons.Default.CameraAlt
-        RecordType.MEMO  -> Icons.Default.Notes
-    }
-    
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        ),
-        modifier = Modifier.fillMaxWidth(),
-        onClick = onClick
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = record.recordTime.toLocalTime(),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            
-            if (photos.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    photos.forEach { photo ->
-                        AsyncImage(
-                            model = photo.filePath,
-                            contentDescription = "添付写真",
-                            modifier = Modifier
-                                .size(100.dp)
-                                .clip(MaterialTheme.shapes.small),
-                            contentScale = ContentScale.Crop
-                        )
-                    }
-                }
-            }
-            
-            if (memos.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
-                memos.forEach { memo ->
-                    Text(
-                        text = memo.memoText,
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(vertical = 4.dp)
-                    )
-                }
-            }
         }
     }
 }

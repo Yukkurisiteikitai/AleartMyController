@@ -21,6 +21,22 @@ interface ObservationEventDao {
     @Query("SELECT * FROM observation_events WHERE googleEventId = :googleEventId")
     suspend fun findByGoogleEventId(googleEventId: String): ObservationEventEntity?
 
+    @Query("""
+        UPDATE observation_events
+        SET googleEventId = :newGoogleId,
+            title = :title,
+            startTime = :startTime,
+            endTime = :endTime
+        WHERE googleEventId = :oldGoogleId
+    """)
+    suspend fun updateGoogleId(
+        oldGoogleId: String,
+        newGoogleId: String,
+        title: String,
+        startTime: Long,
+        endTime: Long
+    )
+
     @Query("SELECT * FROM observation_events WHERE obsEventId = :id")
     suspend fun findById(id: Long): ObservationEventEntity?
 

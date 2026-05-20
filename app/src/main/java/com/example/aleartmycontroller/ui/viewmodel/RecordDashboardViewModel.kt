@@ -6,11 +6,13 @@ import com.example.aleartmycontroller.data.local.entity.EventEntity
 import com.example.aleartmycontroller.data.local.entity.MemoEntity
 import com.example.aleartmycontroller.data.local.entity.PhotoEntity
 import com.example.aleartmycontroller.data.local.entity.RecordEntity
+import com.example.aleartmycontroller.data.local.entity.isLocalDraft
 import com.example.aleartmycontroller.data.repository.EventRepository
 import com.example.aleartmycontroller.data.repository.RecordRepository
 import com.example.aleartmycontroller.data.repository.TogglRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,6 +21,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -37,6 +40,11 @@ data class RecordDashboardUiState(
     val currentObservationNote: String = ""
 )
 
+sealed class RecordDashboardUiEvent {
+    data class ShowError(val message: String) : RecordDashboardUiEvent()
+    data class ShowWarning(val message: String) : RecordDashboardUiEvent()
+}
+
 @HiltViewModel
 class RecordDashboardViewModel @Inject constructor(
     private val eventRepository: EventRepository,
@@ -48,6 +56,9 @@ class RecordDashboardViewModel @Inject constructor(
     val uiState: StateFlow<RecordDashboardUiState> = _uiState.asStateFlow()
 
     private val manualEventId = MutableStateFlow<Long?>(null)
+
+    private val _uiEvent = Channel<RecordDashboardUiEvent>(Channel.BUFFERED)
+    val uiEvent = _uiEvent.receiveAsFlow()
 
     init {
         observeCurrentEvent()
@@ -117,30 +128,97 @@ class RecordDashboardViewModel @Inject constructor(
     private var timerJob: kotlinx.coroutines.Job? = null
     private var startTimeMillis: Long = 0
 
-    fun toggleTimer() {
-        val newState = !_uiState.value.isTimerRunning
-        _uiState.update { it.copy(isTimerRunning = newState) }
+    fun startDraftSession(title: String) {
+        if (_uiState.value.isTimerRunning) return
+        viewModelScope.launch {
+            val draftEvent = eventRepository.createDraftEvent(title)
+            manualStartEvent(draftEvent.eventId)
+        }
+    }
+
+    fun startTimer() {
+        if (_uiState.value.isTimerRunning) return
+        _uiState.update { it.copy(isTimerRunning = true) }
         
-        if (newState) {
-            startTimeMillis = System.currentTimeMillis()
-            startTicker()
-            
-            // Toggl 開始
+        startTimeMillis = System.currentTimeMillis()
+        startTicker()
+        
+        // Toggl 開始
+        viewModelScope.launch {
+            val event = _uiState.value.currentEvent
+            if (event != null) {
+                togglRepository.createEntry(description = event.title, tags = listOf("Observation"))
+            }
+        }
+    }
+
+    fun requestStop() {
+        val state = _uiState.value
+        val event = state.currentEvent ?: return
+        if (!state.isTimerRunning) return
+        val pendingNote = state.currentObservationNote.trim()
+
+        if (!event.isLocalDraft() && state.recentRecords.isEmpty() && pendingNote.isBlank()) {
             viewModelScope.launch {
-                val event = _uiState.value.currentEvent
-                if (event != null) {
-                    togglRepository.createEntry(description = event.title, tags = listOf("Observation"))
+                _uiEvent.send(RecordDashboardUiEvent.ShowError("最低1つの証拠を追加してください"))
+            }
+            return
+        }
+
+        viewModelScope.launch {
+            val memoTexts = state.memosByRecord.values.flatten().map { it.memoText }.toMutableList()
+            val warnings = mutableListOf<String>()
+
+            val localResult = runCatching {
+                if (pendingNote.isNotBlank()) {
+                    recordRepository.addMemoRecord(event, pendingNote)
+                    memoTexts += pendingNote
+                }
+
+                if (event.isLocalDraft()) {
+                    eventRepository.closeDraftEvent(
+                        eventId = event.eventId,
+                        endTimeMillis = System.currentTimeMillis()
+                    )
+                }
+
+                togglRepository.stopCurrentRunningEntry()
+            }
+
+            localResult.onSuccess {
+                _uiState.update {
+                    it.copy(
+                        isTimerRunning = false,
+                        elapsedTimeText = "00:00:00",
+                        currentObservationNote = ""
+                    )
+                }
+                timerJob?.cancel()
+                manualEventId.value = null
+            }.onFailure { error ->
+                _uiEvent.send(RecordDashboardUiEvent.ShowError(error.localizedMessage ?: "終了に失敗しました"))
+                return@launch
+            }
+
+            if (event.isLocalDraft()) {
+                runCatching {
+                    eventRepository.finalizeDraftEvent(
+                        eventId = event.eventId,
+                        description = memoTexts.takeIf { it.isNotEmpty() }?.joinToString("\n\n")
+                    )
+                }.onFailure {
+                    warnings += "Google カレンダーへの予定確定に失敗しました"
+                }
+            } else if (pendingNote.isNotBlank()) {
+                runCatching {
+                    eventRepository.appendMemoToGoogleEvent(event, pendingNote)
+                }.onFailure {
+                    warnings += "Google カレンダーへのメモ追記に失敗しました"
                 }
             }
-        } else {
-            timerJob?.cancel()
-            // タイマー停止時に経過時間をリセットし、もしノートがあればそれを保存する等の処理を検討可能
-            _uiState.update { it.copy(elapsedTimeText = "00:00:00") }
-            manualEventId.value = null // 手動開始モード解除
-            
-            // Toggl 停止
-            viewModelScope.launch {
-                togglRepository.stopCurrentRunningEntry()
+
+            warnings.firstOrNull()?.let { message ->
+                _uiEvent.send(RecordDashboardUiEvent.ShowWarning(message))
             }
         }
     }
