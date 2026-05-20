@@ -1,34 +1,24 @@
 package com.example.aleartmycontroller.ui.screen
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.EventNote
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
 import com.example.aleartmycontroller.data.local.entity.EventEntity
-import com.example.aleartmycontroller.data.local.entity.RecordEntity
-import com.example.aleartmycontroller.data.local.entity.RecordType
 import com.example.aleartmycontroller.ui.util.toLocalDate
 import com.example.aleartmycontroller.ui.util.toLocalTime
 import com.example.aleartmycontroller.ui.viewmodel.EventListViewModel
 import com.example.aleartmycontroller.ui.viewmodel.HistoryViewModel
-
 import com.example.aleartmycontroller.ui.components.EmptyStatePlaceholder
 import com.example.aleartmycontroller.ui.components.TimelineRecordItem
 import com.example.aleartmycontroller.ui.model.DomainRecord

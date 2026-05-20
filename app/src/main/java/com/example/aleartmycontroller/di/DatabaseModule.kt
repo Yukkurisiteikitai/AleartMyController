@@ -1,6 +1,7 @@
 package com.example.aleartmycontroller.di
 
 import android.content.Context
+import com.example.aleartmycontroller.BuildConfig
 import androidx.room.Room
 import com.example.aleartmycontroller.data.local.AppDatabase
 import com.example.aleartmycontroller.data.local.dao.AnalyticsDao
@@ -25,7 +26,11 @@ object DatabaseModule {
     fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, AppDatabase.DATABASE_NAME)
             .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4)
-            .fallbackToDestructiveMigrationOnDowngrade()
+            .apply {
+                if (BuildConfig.DEBUG) {
+                    fallbackToDestructiveMigrationOnDowngrade()
+                }
+            }
             .build()
 
     @Provides fun provideAnalyticsDao(db: AppDatabase): AnalyticsDao           = db.analyticsDao()

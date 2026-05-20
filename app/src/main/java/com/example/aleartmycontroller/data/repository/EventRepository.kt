@@ -1,6 +1,5 @@
 package com.example.aleartmycontroller.data.repository
 
-import com.example.aleartmycontroller.BuildConfig
 import com.example.aleartmycontroller.data.local.dao.EventDao
 import com.example.aleartmycontroller.data.local.dao.ObservationEventDao
 import com.example.aleartmycontroller.data.local.entity.EventEntity
@@ -14,11 +13,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -30,6 +32,7 @@ class EventRepository @Inject constructor(
 ) {
     private val isoFormatter: DateTimeFormatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME
     private val zoneId: ZoneId = ZoneId.systemDefault()
+    private val memoUpdateMutexes = ConcurrentHashMap<String, Mutex>()
 
     /** 今日以降のイベントをFlowで監視（ローカルDB） */
     fun observeUpcomingEvents(): Flow<List<EventEntity>> {
@@ -91,51 +94,65 @@ class EventRepository @Inject constructor(
         return draftEvent.copy(eventId = eventId)
     }
 
+    suspend fun closeDraftEvent(
+        eventId: Long,
+        endTimeMillis: Long
+    ): EventEntity {
+        val draftEvent = eventDao.findById(eventId) ?: error("Event not found: $eventId")
+        require(draftEvent.isLocalDraft()) { "Not a draft event: ${draftEvent.googleEventId}" }
+
+        val closed = draftEvent.copy(endTime = endTimeMillis)
+        eventDao.upsert(closed)
+        return closed
+    }
+
     suspend fun finalizeDraftEvent(
         eventId: Long,
-        endTimeMillis: Long,
         description: String?
     ): EventEntity {
         val draftEvent = eventDao.findById(eventId) ?: error("Event not found: $eventId")
         require(draftEvent.isLocalDraft()) { "Not a draft event: ${draftEvent.googleEventId}" }
 
-        val inserted = calendarApi.insertEvent(
-            body = CalendarEventUpsertRequest(
-                summary = draftEvent.title,
-                description = description?.takeIf { it.isNotBlank() },
-                start = toRequestTime(draftEvent.startTime),
-                end = toRequestTime(endTimeMillis)
+        return memoUpdateMutexFor(draftEvent.googleEventId).withLock {
+            val inserted = calendarApi.insertEvent(
+                body = CalendarEventUpsertRequest(
+                    summary = draftEvent.title,
+                    description = description?.takeIf { it.isNotBlank() },
+                    start = toRequestTime(draftEvent.startTime),
+                    end = toRequestTime(draftEvent.endTime)
+                )
             )
-        )
 
-        val finalized = draftEvent.copy(
-            googleEventId = inserted.id,
-            endTime = endTimeMillis
-        )
-        eventDao.upsert(finalized)
-        observationEventDao.updateGoogleId(
-            oldGoogleId = draftEvent.googleEventId,
-            newGoogleId = inserted.id,
-            title = finalized.title,
-            startTime = finalized.startTime,
-            endTime = finalized.endTime
-        )
-        return finalized
+            val finalized = draftEvent.copy(
+                googleEventId = inserted.id
+            )
+            eventDao.upsert(finalized)
+            observationEventDao.updateGoogleId(
+                oldGoogleId = draftEvent.googleEventId,
+                newGoogleId = inserted.id,
+                title = finalized.title,
+                startTime = finalized.startTime,
+                endTime = finalized.endTime
+            )
+            finalized
+        }
     }
 
     suspend fun appendMemoToGoogleEvent(event: EventEntity, memoText: String) {
         if (memoText.isBlank() || event.isLocalDraft()) return
 
-        val remote = calendarApi.getEvent(eventId = event.googleEventId)
-        val mergedDescription = listOfNotNull(
-            remote.description?.takeIf { it.isNotBlank() },
-            memoText.trim()
-        ).joinToString("\n\n")
+        memoUpdateMutexFor(event.googleEventId).withLock {
+            val remote = calendarApi.getEvent(eventId = event.googleEventId)
+            val mergedDescription = listOfNotNull(
+                remote.description?.takeIf { it.isNotBlank() },
+                memoText.trim()
+            ).joinToString("\n\n")
 
-        calendarApi.patchEvent(
-            eventId = event.googleEventId,
-            body = CalendarEventPatchRequest(description = mergedDescription)
-        )
+            calendarApi.patchEvent(
+                eventId = event.googleEventId,
+                body = CalendarEventPatchRequest(description = mergedDescription)
+            )
+        }
     }
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -163,5 +180,9 @@ class EventRepository @Inject constructor(
             dateTime = dateTime,
             timeZone = zoneId.id
         )
+    }
+
+    private fun memoUpdateMutexFor(googleEventId: String): Mutex {
+        return memoUpdateMutexes.getOrPut(googleEventId) { Mutex() }
     }
 }

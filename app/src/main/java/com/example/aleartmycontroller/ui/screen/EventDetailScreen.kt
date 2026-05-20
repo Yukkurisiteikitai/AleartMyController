@@ -6,25 +6,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.aleartmycontroller.data.local.entity.RecordEntity
-import com.example.aleartmycontroller.data.local.entity.RecordType
 import com.example.aleartmycontroller.ui.util.toLocalTime
 import com.example.aleartmycontroller.ui.viewmodel.EventDetailViewModel
-import coil.compose.AsyncImage
-import com.example.aleartmycontroller.data.local.entity.MemoEntity
-import com.example.aleartmycontroller.data.local.entity.PhotoEntity
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
-
 import com.example.aleartmycontroller.ui.components.EmptyStatePlaceholder
 import com.example.aleartmycontroller.ui.components.TimelineRecordItem
 import com.example.aleartmycontroller.ui.model.DomainRecord

@@ -12,6 +12,7 @@ import com.example.aleartmycontroller.data.repository.RecordRepository
 import com.example.aleartmycontroller.data.repository.TogglRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,10 +21,9 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.receiveAsFlow
 import javax.inject.Inject
 
 data class RecordDashboardUiState(
@@ -42,6 +42,7 @@ data class RecordDashboardUiState(
 
 sealed class RecordDashboardUiEvent {
     data class ShowError(val message: String) : RecordDashboardUiEvent()
+    data class ShowWarning(val message: String) : RecordDashboardUiEvent()
 }
 
 @HiltViewModel
@@ -56,7 +57,7 @@ class RecordDashboardViewModel @Inject constructor(
 
     private val manualEventId = MutableStateFlow<Long?>(null)
 
-    private val _uiEvent = Channel<RecordDashboardUiEvent>()
+    private val _uiEvent = Channel<RecordDashboardUiEvent>(Channel.BUFFERED)
     val uiEvent = _uiEvent.receiveAsFlow()
 
     init {
@@ -165,26 +166,26 @@ class RecordDashboardViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            runCatching {
-                val memoTexts = state.memosByRecord.values.flatten().map { it.memoText }.toMutableList()
+            val memoTexts = state.memosByRecord.values.flatten().map { it.memoText }.toMutableList()
+            val warnings = mutableListOf<String>()
 
+            val localResult = runCatching {
                 if (pendingNote.isNotBlank()) {
                     recordRepository.addMemoRecord(event, pendingNote)
                     memoTexts += pendingNote
-                    if (!event.isLocalDraft()) {
-                        eventRepository.appendMemoToGoogleEvent(event, pendingNote)
-                    }
                 }
 
                 if (event.isLocalDraft()) {
-                    eventRepository.finalizeDraftEvent(
+                    eventRepository.closeDraftEvent(
                         eventId = event.eventId,
-                        endTimeMillis = System.currentTimeMillis(),
-                        description = memoTexts.takeIf { it.isNotEmpty() }?.joinToString("\n\n")
+                        endTimeMillis = System.currentTimeMillis()
                     )
                 }
+
                 togglRepository.stopCurrentRunningEntry()
-            }.onSuccess {
+            }
+
+            localResult.onSuccess {
                 _uiState.update {
                     it.copy(
                         isTimerRunning = false,
@@ -196,6 +197,28 @@ class RecordDashboardViewModel @Inject constructor(
                 manualEventId.value = null
             }.onFailure { error ->
                 _uiEvent.send(RecordDashboardUiEvent.ShowError(error.localizedMessage ?: "終了に失敗しました"))
+                return@launch
+            }
+
+            if (event.isLocalDraft()) {
+                runCatching {
+                    eventRepository.finalizeDraftEvent(
+                        eventId = event.eventId,
+                        description = memoTexts.takeIf { it.isNotEmpty() }?.joinToString("\n\n")
+                    )
+                }.onFailure {
+                    warnings += "Google カレンダーへの予定確定に失敗しました"
+                }
+            } else if (pendingNote.isNotBlank()) {
+                runCatching {
+                    eventRepository.appendMemoToGoogleEvent(event, pendingNote)
+                }.onFailure {
+                    warnings += "Google カレンダーへのメモ追記に失敗しました"
+                }
+            }
+
+            warnings.firstOrNull()?.let { message ->
+                _uiEvent.send(RecordDashboardUiEvent.ShowWarning(message))
             }
         }
     }

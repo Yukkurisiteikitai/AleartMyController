@@ -4,9 +4,6 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.aleartmycontroller.data.local.entity.EventEntity
-import com.example.aleartmycontroller.data.local.entity.MemoEntity
-import com.example.aleartmycontroller.data.local.entity.PhotoEntity
-import com.example.aleartmycontroller.data.local.entity.RecordEntity
 import com.example.aleartmycontroller.data.repository.EventRepository
 import com.example.aleartmycontroller.data.repository.RecordRepository
 import com.example.aleartmycontroller.ui.model.DomainRecord

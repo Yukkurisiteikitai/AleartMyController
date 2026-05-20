@@ -59,6 +59,9 @@ fun RecordDashboardScreen(
                 is RecordDashboardUiEvent.ShowError -> {
                     snackbarHostState.showSnackbar(event.message)
                 }
+                is RecordDashboardUiEvent.ShowWarning -> {
+                    snackbarHostState.showSnackbar(event.message)
+                }
             }
         }
     }

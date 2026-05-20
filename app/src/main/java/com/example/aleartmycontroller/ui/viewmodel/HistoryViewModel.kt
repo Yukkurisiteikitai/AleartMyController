@@ -2,15 +2,12 @@ package com.example.aleartmycontroller.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.aleartmycontroller.data.local.entity.MemoEntity
-import com.example.aleartmycontroller.data.local.entity.PhotoEntity
-import com.example.aleartmycontroller.data.local.entity.RecordEntity
 import com.example.aleartmycontroller.data.repository.RecordRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import javax.inject.Inject
 import com.example.aleartmycontroller.ui.model.DomainRecord
 import com.example.aleartmycontroller.ui.model.toDomainModel
 import kotlinx.coroutines.flow.*
+import javax.inject.Inject
 
 data class HistoryUiState(
     val isRecordView: Boolean = false
