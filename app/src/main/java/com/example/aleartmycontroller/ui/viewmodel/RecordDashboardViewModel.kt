@@ -21,6 +21,8 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
 import javax.inject.Inject
 
 data class RecordDashboardUiState(
@@ -37,6 +39,10 @@ data class RecordDashboardUiState(
     val currentObservationNote: String = ""
 )
 
+sealed class RecordDashboardUiEvent {
+    data class ShowError(val message: String) : RecordDashboardUiEvent()
+}
+
 @HiltViewModel
 class RecordDashboardViewModel @Inject constructor(
     private val eventRepository: EventRepository,
@@ -48,6 +54,9 @@ class RecordDashboardViewModel @Inject constructor(
     val uiState: StateFlow<RecordDashboardUiState> = _uiState.asStateFlow()
 
     private val manualEventId = MutableStateFlow<Long?>(null)
+
+    private val _uiEvent = Channel<RecordDashboardUiEvent>()
+    val uiEvent = _uiEvent.receiveAsFlow()
 
     init {
         observeCurrentEvent()
@@ -117,31 +126,40 @@ class RecordDashboardViewModel @Inject constructor(
     private var timerJob: kotlinx.coroutines.Job? = null
     private var startTimeMillis: Long = 0
 
-    fun toggleTimer() {
-        val newState = !_uiState.value.isTimerRunning
-        _uiState.update { it.copy(isTimerRunning = newState) }
+    fun startTimer() {
+        if (_uiState.value.isTimerRunning) return
+        _uiState.update { it.copy(isTimerRunning = true) }
         
-        if (newState) {
-            startTimeMillis = System.currentTimeMillis()
-            startTicker()
-            
-            // Toggl 開始
-            viewModelScope.launch {
-                val event = _uiState.value.currentEvent
-                if (event != null) {
-                    togglRepository.createEntry(description = event.title, tags = listOf("Observation"))
-                }
+        startTimeMillis = System.currentTimeMillis()
+        startTicker()
+        
+        // Toggl 開始
+        viewModelScope.launch {
+            val event = _uiState.value.currentEvent
+            if (event != null) {
+                togglRepository.createEntry(description = event.title, tags = listOf("Observation"))
             }
-        } else {
-            timerJob?.cancel()
-            // タイマー停止時に経過時間をリセットし、もしノートがあればそれを保存する等の処理を検討可能
-            _uiState.update { it.copy(elapsedTimeText = "00:00:00") }
-            manualEventId.value = null // 手動開始モード解除
-            
-            // Toggl 停止
+        }
+    }
+
+    fun requestStop() {
+        if (!_uiState.value.isTimerRunning) return
+
+        if (_uiState.value.recentRecords.isEmpty()) {
             viewModelScope.launch {
-                togglRepository.stopCurrentRunningEntry()
+                _uiEvent.send(RecordDashboardUiEvent.ShowError("最低1つの証拠を追加してください"))
             }
+            return
+        }
+
+        _uiState.update { it.copy(isTimerRunning = false) }
+        timerJob?.cancel()
+        _uiState.update { it.copy(elapsedTimeText = "00:00:00") }
+        manualEventId.value = null // 手動開始モード解除
+        
+        // Toggl 停止
+        viewModelScope.launch {
+            togglRepository.stopCurrentRunningEntry()
         }
     }
 

@@ -2,6 +2,7 @@ package com.example.aleartmycontroller.ui.screen
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -22,6 +23,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.aleartmycontroller.data.local.entity.EventEntity
 import com.example.aleartmycontroller.ui.util.toLocalTime
+import com.example.aleartmycontroller.ui.viewmodel.RecordDashboardUiEvent
 import com.example.aleartmycontroller.ui.viewmodel.RecordDashboardViewModel
 
 /**
@@ -37,6 +39,7 @@ fun RecordDashboardScreen(
     viewModel: RecordDashboardViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(initialEventId) {
         initialEventId?.let { id ->
@@ -44,7 +47,18 @@ fun RecordDashboardScreen(
         }
     }
 
+    LaunchedEffect(viewModel) {
+        viewModel.uiEvent.collect { event ->
+            when (event) {
+                is RecordDashboardUiEvent.ShowError -> {
+                    snackbarHostState.showSnackbar(event.message)
+                }
+            }
+        }
+    }
+
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("証拠を記録", fontWeight = FontWeight.ExtraBold) },
@@ -59,7 +73,18 @@ fun RecordDashboardScreen(
                     noteValue = uiState.currentObservationNote,
                     onNoteChange = viewModel::updateNote,
                     isRunning = uiState.isTimerRunning,
-                    onToggle = { viewModel.toggleTimer() }
+                    onShortPress = {
+                        if (uiState.isTimerRunning) {
+                            uiState.currentEvent?.eventId?.let { onAddRecord(it) }
+                        } else {
+                            viewModel.startTimer()
+                        }
+                    },
+                    onLongPress = {
+                        if (uiState.isTimerRunning) {
+                            viewModel.requestStop()
+                        }
+                    }
                 )
             }
         }
@@ -145,13 +170,14 @@ private fun TimerDisplay(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun RecordingControlBar(
     noteValue: String,
     onNoteChange: (String) -> Unit,
     isRunning: Boolean,
-    onToggle: () -> Unit
+    onShortPress: () -> Unit,
+    onLongPress: () -> Unit
 ) {
     Surface(
         tonalElevation = 8.dp,
@@ -179,12 +205,16 @@ private fun RecordingControlBar(
                 singleLine = true
             )
             
-            IconButton(
-                onClick = onToggle,
+            Box(
                 modifier = Modifier
                     .size(56.dp)
                     .clip(CircleShape)
                     .background(if (isRunning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+                    .combinedClickable(
+                        onClick = onShortPress,
+                        onLongClick = onLongPress
+                    ),
+                contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = if (isRunning) Icons.Default.Stop else Icons.Default.PlayArrow,
