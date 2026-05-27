@@ -147,7 +147,12 @@ class RecordDashboardViewModel @Inject constructor(
         viewModelScope.launch {
             val event = _uiState.value.currentEvent
             if (event != null) {
-                togglRepository.createEntry(description = event.title, tags = listOf("Observation"))
+                runCatching {
+                    togglRepository.queueCreateEntry(
+                        description = event.title,
+                        tags = listOf("Observation")
+                    )
+                }
             }
         }
     }
@@ -182,7 +187,7 @@ class RecordDashboardViewModel @Inject constructor(
                     )
                 }
 
-                togglRepository.stopCurrentRunningEntry()
+                togglRepository.queueStopCurrentEntry()
             }
 
             localResult.onSuccess {
@@ -237,7 +242,12 @@ class RecordDashboardViewModel @Inject constructor(
         viewModelScope.launch {
             val event = eventRepository.findById(eventId)
             if (event != null) {
-                togglRepository.createEntry(description = event.title, tags = listOf("Observation"))
+                runCatching {
+                    togglRepository.queueCreateEntry(
+                        description = event.title,
+                        tags = listOf("Observation")
+                    )
+                }
             }
         }
     }

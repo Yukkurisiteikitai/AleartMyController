@@ -2,11 +2,14 @@ package com.example.aleartmycontroller.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.aleartmycontroller.data.repository.AmcDraftRepository
 import com.example.aleartmycontroller.data.preferences.AppPreferences
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -17,7 +20,8 @@ val PRESET_OPTIONS: List<Int> = listOf(1, 3, 5, 10, 25, 30, 60, 0)
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val prefs: AppPreferences,
-    private val authRepository: com.example.aleartmycontroller.data.repository.AuthRepository
+    private val authRepository: com.example.aleartmycontroller.data.repository.AuthRepository,
+    private val amcDraftRepository: AmcDraftRepository
 ) : ViewModel() {
 
     private val _userEmail = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
@@ -42,6 +46,18 @@ class SettingsViewModel @Inject constructor(
 
     val customIntervalMinutes: StateFlow<Int> = prefs.customIntervalMinutes
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 30)
+
+    val amcQueueSummary: StateFlow<String> = combine(
+        amcDraftRepository.observePendingDraftCount(),
+        amcDraftRepository.observePendingAttachments().map { it.size },
+        amcDraftRepository.observeOutbox().map { it.size }
+    ) { draftCount, attachmentCount, outboxCount ->
+        "下書き $draftCount / 添付 $attachmentCount / 送信待ち $outboxCount"
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        "AMCキューは空です"
+    )
 
     fun selectInterval(minutes: Int) {
         viewModelScope.launch { prefs.setIntervalMinutes(minutes) }

@@ -3,6 +3,7 @@ package com.example.aleartmycontroller.di
 import com.example.aleartmycontroller.BuildConfig
 import com.example.aleartmycontroller.data.remote.google.GoogleCalendarApi
 import com.example.aleartmycontroller.data.remote.toggl.TogglApi
+import com.example.aleartmycontroller.data.preferences.TogglTokenStore
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -28,6 +29,7 @@ object NetworkModule {
     @Singleton
     fun provideLoggingInterceptor(): HttpLoggingInterceptor =
         HttpLoggingInterceptor().apply {
+            redactHeader("Authorization")
             level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
                     else HttpLoggingInterceptor.Level.NONE
         }
@@ -80,18 +82,18 @@ object NetworkModule {
     @Singleton
     @TogglRetrofit
     fun provideTogglOkHttpClient(
-        logging: HttpLoggingInterceptor
+        logging: HttpLoggingInterceptor,
+        tokenStore: TogglTokenStore
     ): OkHttpClient =
         OkHttpClient.Builder()
             .addInterceptor(logging)
             .addInterceptor { chain ->
-                val credential = Credentials.basic(
-                    BuildConfig.TOGGL_API_TOKEN,
-                    "api_token"
-                )
-                val request = chain.request().newBuilder()
-                    .header("Authorization", credential)
-                    .build()
+                val token = tokenStore.getToken()
+                val request = chain.request().newBuilder().apply {
+                    if (!token.isNullOrBlank()) {
+                        header("Authorization", Credentials.basic(token, "api_token"))
+                    }
+                }.build()
                 chain.proceed(request)
             }
             .build()

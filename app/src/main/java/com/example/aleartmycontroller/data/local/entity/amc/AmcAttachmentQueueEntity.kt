@@ -1,0 +1,35 @@
+package com.example.aleartmycontroller.data.local.entity.amc
+
+import androidx.room.Entity
+import androidx.room.Index
+import androidx.room.PrimaryKey
+import com.example.aleartmycontroller.data.amc.AmcAttachmentStatus
+import com.example.aleartmycontroller.data.amc.AmcAttachmentType
+
+@Entity(
+    tableName = "amc_attachment_queue",
+    indices = [
+        Index("draftRecordId"),
+        Index("status"),
+        Index(value = ["idempotencyKey"], unique = true)
+    ]
+)
+data class AmcAttachmentQueueEntity(
+    @PrimaryKey(autoGenerate = true) val attachmentId: Long = 0,
+    val draftRecordId: Long,
+    val type: AmcAttachmentType,
+    val localUri: String,
+    val r2Key: String? = null,
+    val mimeType: String,
+    val sizeBytes: Long,
+    val checksum: String? = null,
+    val status: AmcAttachmentStatus = AmcAttachmentStatus.PENDING,
+    val retryCount: Int = 0,
+    val lastErrorMessage: String? = null,
+    val uploadedAtMillis: Long? = null,
+    val readyAtMillis: Long? = null,
+    val createdAtMillis: Long,
+    val updatedAtMillis: Long,
+    val idempotencyKey: String
+)
+

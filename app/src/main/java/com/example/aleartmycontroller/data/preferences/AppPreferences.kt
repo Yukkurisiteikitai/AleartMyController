@@ -41,6 +41,9 @@ class AppPreferences @Inject constructor(
         /** カスタムインターバル（分） */
         val KEY_CUSTOM_INTERVAL_MINUTES = intPreferencesKey("custom_interval_minutes")
 
+        /** 初回セットアップ完了フラグ */
+        val KEY_FIRST_RUN_SETUP_COMPLETE = intPreferencesKey("first_run_setup_complete")
+
         val DEFAULT_PRESET_ORDER = "1,3,5,10,25,30,60,0"
         const val DEFAULT_INTERVAL_MINUTES = 60
     }
@@ -62,6 +65,10 @@ class AppPreferences @Inject constructor(
         prefs[KEY_CUSTOM_INTERVAL_MINUTES] ?: 30
     }
 
+    val firstRunSetupComplete: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        (prefs[KEY_FIRST_RUN_SETUP_COMPLETE] ?: 0) == 1
+    }
+
     suspend fun setIntervalMinutes(minutes: Int) {
         context.dataStore.edit { it[KEY_INTERVAL_MINUTES] = minutes }
     }
@@ -76,5 +83,9 @@ class AppPreferences @Inject constructor(
 
     suspend fun setCustomIntervalMinutes(minutes: Int) {
         context.dataStore.edit { it[KEY_CUSTOM_INTERVAL_MINUTES] = minutes }
+    }
+
+    suspend fun setFirstRunSetupComplete(completed: Boolean) {
+        context.dataStore.edit { it[KEY_FIRST_RUN_SETUP_COMPLETE] = if (completed) 1 else 0 }
     }
 }

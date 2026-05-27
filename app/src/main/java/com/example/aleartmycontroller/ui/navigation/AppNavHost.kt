@@ -22,21 +22,37 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.aleartmycontroller.ui.screen.*
 import com.example.aleartmycontroller.ui.components.NewDraftEventDialog
+import com.example.aleartmycontroller.ui.viewmodel.AppLaunchViewModel
 
 @Composable
 fun AppNavHost(initialEventId: Long? = null) {
     val navController = rememberNavController()
+    val launchViewModel: AppLaunchViewModel = hiltViewModel()
     var showDraftDialog by remember { mutableStateOf(false) }
+    val onboardingComplete by launchViewModel.onboardingComplete.collectAsStateWithLifecycle()
 
-    LaunchedEffect(initialEventId) {
-        initialEventId?.let { id ->
-            navController.navigate(Screen.AddRecord.createRoute(id))
+    LaunchedEffect(initialEventId, onboardingComplete) {
+        if (onboardingComplete) {
+            initialEventId?.let { id ->
+                navController.navigate(Screen.AddRecord.createRoute(id))
+            }
         }
     }
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
+
+    LaunchedEffect(onboardingComplete, currentDestination) {
+        if (onboardingComplete && currentDestination?.route == Screen.Setup.route) {
+            navController.navigate(Screen.EventList.route) {
+                popUpTo(Screen.Setup.route) { inclusive = true }
+                launchSingleTop = true
+            }
+        }
+    }
 
     val showBottomBar = listOf(
         Screen.EventList.route, Screen.RecordList.route, Screen.History.route, Screen.Analytics.route
@@ -126,9 +142,20 @@ fun AppNavHost(initialEventId: Long? = null) {
 
         NavHost(
             navController = navController,
-            startDestination = Screen.EventList.route,
+            startDestination = if (onboardingComplete) Screen.EventList.route else Screen.Setup.route,
             modifier = Modifier.padding(innerPadding)
         ) {
+            composable(Screen.Setup.route) {
+                SetupScreen(
+                    onSkip = {
+                        launchViewModel.setOnboardingComplete(true)
+                    },
+                    onFinished = {
+                        launchViewModel.setOnboardingComplete(true)
+                    },
+                    onBack = null
+                )
+            }
             composable(Screen.EventList.route) {
                 EventListScreen(
                     onEventClick = { eventId ->
@@ -158,7 +185,10 @@ fun AppNavHost(initialEventId: Long? = null) {
                 )
             }
             composable(Screen.Settings.route) {
-                SettingsScreen(onBack = { navController.popBackStack() })
+                SettingsScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenSetup = { navController.navigate(Screen.Setup.route) }
+                )
             }
             composable(
                 route = Screen.EventDetail.route,

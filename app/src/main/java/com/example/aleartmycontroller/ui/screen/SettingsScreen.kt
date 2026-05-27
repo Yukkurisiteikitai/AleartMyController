@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onOpenSetup: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
@@ -31,6 +32,7 @@ fun SettingsScreen(
     val notificationsEnabled by viewModel.notificationsEnabled.collectAsStateWithLifecycle()
     val customInterval by viewModel.customIntervalMinutes.collectAsStateWithLifecycle()
     val userEmail by viewModel.userEmail.collectAsStateWithLifecycle()
+    val amcQueueSummary by viewModel.amcQueueSummary.collectAsStateWithLifecycle()
     var showCustomDialog by remember { mutableStateOf(false) }
 
     // Google Sign-In Launcher
@@ -114,6 +116,37 @@ fun SettingsScreen(
                         if (minutes == 0) showCustomDialog = true
                         else viewModel.selectInterval(minutes)
                     }
+                )
+            }
+
+            item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
+
+            item {
+                ListItem(
+                    headlineContent = { Text("初回セットアップ") },
+                    supportingContent = { Text("Google 連携と Toggl token を順番に再設定できます") },
+                    trailingContent = {
+                        Button(onClick = onOpenSetup) {
+                            Text("開く")
+                        }
+                    }
+                )
+            }
+
+            item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
+
+            // ---- AMC 状態 ----
+            item {
+                Text(
+                    "AMC",
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
+            item {
+                ListItem(
+                    headlineContent = { Text("ローカルキュー") },
+                    supportingContent = { Text(amcQueueSummary) }
                 )
             }
 

@@ -43,10 +43,12 @@ class AddRecordViewModel @Inject constructor(
 
     private suspend fun logToToggl(tag: String) {
         val event = eventRepository.findById(eventId) ?: return
-        togglRepository.createEntry(
-            description = event.title,
-            tags = listOf(tag, "Observation")
-        )
+        runCatching {
+            togglRepository.queueCreateEntry(
+                description = event.title,
+                tags = listOf(tag, "Observation")
+            )
+        }
     }
 
     fun addPhoto(uri: Uri) {
