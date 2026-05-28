@@ -61,7 +61,7 @@ class RecordTypeConverter {
         TogglPendingActionEntity::class,
         TogglTimeEntryCacheEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = true
 )
 @TypeConverters(RecordTypeConverter::class, AmcTypeConverters::class)
@@ -336,6 +336,23 @@ abstract class AppDatabase : RoomDatabase() {
                 )
                 db.execSQL(
                     "CREATE UNIQUE INDEX IF NOT EXISTS `index_amc_outbox_jobs_idempotencyKey` ON `amc_outbox_jobs`(`idempotencyKey`)"
+                )
+            }
+        }
+
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE `amc_attachment_queue` ADD COLUMN `uploadSessionId` TEXT"
+                )
+                db.execSQL(
+                    "ALTER TABLE `amc_attachment_queue` ADD COLUMN `attemptNumber` INTEGER NOT NULL DEFAULT 0"
+                )
+                db.execSQL(
+                    "ALTER TABLE `amc_attachment_queue` ADD COLUMN `lastErrorCode` TEXT"
+                )
+                db.execSQL(
+                    "ALTER TABLE `amc_attachment_queue` ADD COLUMN `expiresAtMillis` INTEGER"
                 )
             }
         }

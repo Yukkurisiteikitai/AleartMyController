@@ -32,7 +32,7 @@ interface AmcApi {
     suspend fun completeAttachment(
         @Path("id") recordId: String,
         @Body body: AmcAttachmentCompleteRequest
-    ): AmcAttachmentResponse
+    ): AmcAttachmentCompleteResponse
 
     @GET("connect/app/amc/share")
     suspend fun resolveShare(
@@ -47,4 +47,3 @@ interface AmcApi {
         @Path("id") recordId: String
     ): AmcRecordAccessResponse
 }
-

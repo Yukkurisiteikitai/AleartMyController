@@ -21,7 +21,7 @@ interface AmcAttachmentQueueDao {
     @Query("SELECT * FROM amc_attachment_queue WHERE draftRecordId = :draftRecordId ORDER BY createdAtMillis ASC")
     fun observeByDraftRecordId(draftRecordId: Long): Flow<List<AmcAttachmentQueueEntity>>
 
-    @Query("SELECT * FROM amc_attachment_queue WHERE status IN ('PENDING', 'FAILED') ORDER BY updatedAtMillis ASC")
+    @Query("SELECT * FROM amc_attachment_queue WHERE status IN ('PENDING', 'NEEDS_RETRY') ORDER BY updatedAtMillis ASC")
     fun observePendingUploads(): Flow<List<AmcAttachmentQueueEntity>>
 
     @Query(
@@ -29,8 +29,12 @@ interface AmcAttachmentQueueDao {
         UPDATE amc_attachment_queue
         SET status = :status,
             r2Key = :r2Key,
+            uploadSessionId = :uploadSessionId,
+            attemptNumber = :attemptNumber,
             lastErrorMessage = :lastErrorMessage,
+            lastErrorCode = :lastErrorCode,
             retryCount = :retryCount,
+            expiresAtMillis = :expiresAtMillis,
             uploadedAtMillis = :uploadedAtMillis,
             readyAtMillis = :readyAtMillis,
             updatedAtMillis = :updatedAtMillis
@@ -41,11 +45,14 @@ interface AmcAttachmentQueueDao {
         attachmentId: Long,
         status: String,
         r2Key: String? = null,
+        uploadSessionId: String? = null,
+        attemptNumber: Int,
         lastErrorMessage: String? = null,
+        lastErrorCode: String? = null,
         retryCount: Int,
+        expiresAtMillis: Long? = null,
         uploadedAtMillis: Long? = null,
         readyAtMillis: Long? = null,
         updatedAtMillis: Long
     )
 }
-

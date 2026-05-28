@@ -24,12 +24,15 @@ data class AmcAttachmentQueueEntity(
     val sizeBytes: Long,
     val checksum: String? = null,
     val status: AmcAttachmentStatus = AmcAttachmentStatus.PENDING,
+    val uploadSessionId: String? = null,
+    val attemptNumber: Int = 0,
     val retryCount: Int = 0,
+    val lastErrorCode: String? = null,
     val lastErrorMessage: String? = null,
+    val expiresAtMillis: Long? = null,
     val uploadedAtMillis: Long? = null,
     val readyAtMillis: Long? = null,
     val createdAtMillis: Long,
     val updatedAtMillis: Long,
     val idempotencyKey: String
 )
-

@@ -1,12 +1,14 @@
 package com.example.aleartmycontroller.data.repository
 
 import androidx.room.withTransaction
+import android.util.Log
 import com.example.aleartmycontroller.data.amc.AmcAttachmentStatus
 import com.example.aleartmycontroller.data.amc.AmcAttachmentType
 import com.example.aleartmycontroller.data.amc.AmcContentPolicy
 import com.example.aleartmycontroller.data.amc.AmcIdempotency
 import com.example.aleartmycontroller.data.amc.AmcOutboxJobState
 import com.example.aleartmycontroller.data.amc.AmcOutboxJobType
+import com.example.aleartmycontroller.data.amc.AmcAttachmentQueueLogger
 import com.example.aleartmycontroller.data.amc.AmcSource
 import com.example.aleartmycontroller.data.amc.AmcSyncState
 import com.example.aleartmycontroller.data.amc.AmcVisibility
@@ -174,8 +176,7 @@ class AmcDraftRepository @Inject constructor(
         }
 
         val now = System.currentTimeMillis()
-        attachmentDao.insert(
-            AmcAttachmentQueueEntity(
+        val attachment = AmcAttachmentQueueEntity(
                 draftRecordId = draftRecordId,
                 type = type,
                 localUri = localUri,
@@ -187,21 +188,52 @@ class AmcDraftRepository @Inject constructor(
                 updatedAtMillis = now,
                 idempotencyKey = idempotencyKey
             )
+        val attachmentId = attachmentDao.insert(attachment)
+        AmcAttachmentQueueLogger.logQueueEvent(
+            level = Log.DEBUG,
+            event = "queue_enqueued",
+            attachment = attachment.copy(attachmentId = attachmentId),
+            extra = mapOf("idempotencyKey" to idempotencyKey)
         )
+        attachmentId
     }
 
     suspend fun markAttachmentUploading(attachmentId: Long) {
+        markAttachmentUploading(attachmentId = attachmentId, uploadSessionId = null, expiresAtMillis = null)
+    }
+
+    suspend fun markAttachmentUploading(
+        attachmentId: Long,
+        uploadSessionId: String?,
+        expiresAtMillis: Long?
+    ) {
         val now = System.currentTimeMillis()
         val current = attachmentDao.findById(attachmentId) ?: error("Attachment not found: $attachmentId")
         attachmentDao.updateStatus(
             attachmentId = attachmentId,
             status = AmcAttachmentStatus.UPLOADING.name,
             r2Key = current.r2Key,
+            uploadSessionId = uploadSessionId,
+            attemptNumber = current.attemptNumber + 1,
             lastErrorMessage = null,
+            lastErrorCode = null,
             retryCount = current.retryCount,
+            expiresAtMillis = expiresAtMillis,
             uploadedAtMillis = current.uploadedAtMillis,
             readyAtMillis = current.readyAtMillis,
             updatedAtMillis = now
+        )
+        AmcAttachmentQueueLogger.logQueueEvent(
+            level = Log.DEBUG,
+            event = "queue_uploading",
+            attachment = current.copy(
+                status = AmcAttachmentStatus.UPLOADING,
+                uploadSessionId = uploadSessionId,
+                attemptNumber = current.attemptNumber + 1,
+                expiresAtMillis = expiresAtMillis,
+                updatedAtMillis = now
+            ),
+            previousStatus = current.status
         )
     }
 
@@ -215,16 +247,69 @@ class AmcDraftRepository @Inject constructor(
             attachmentId = attachmentId,
             status = AmcAttachmentStatus.READY.name,
             r2Key = r2Key,
+            uploadSessionId = current.uploadSessionId,
+            attemptNumber = current.attemptNumber,
             lastErrorMessage = null,
+            lastErrorCode = null,
             retryCount = current.retryCount,
+            expiresAtMillis = current.expiresAtMillis,
             uploadedAtMillis = now,
             readyAtMillis = now,
             updatedAtMillis = now
+        )
+        AmcAttachmentQueueLogger.logQueueEvent(
+            level = Log.INFO,
+            event = "queue_ready",
+            attachment = current.copy(
+                status = AmcAttachmentStatus.READY,
+                r2Key = r2Key,
+                uploadedAtMillis = now,
+                readyAtMillis = now,
+                updatedAtMillis = now
+            ),
+            previousStatus = current.status
+        )
+    }
+
+    suspend fun markAttachmentNeedsRetry(
+        attachmentId: Long,
+        errorCode: String,
+        errorMessage: String
+    ) {
+        val now = System.currentTimeMillis()
+        val current = attachmentDao.findById(attachmentId) ?: error("Attachment not found: $attachmentId")
+        attachmentDao.updateStatus(
+            attachmentId = attachmentId,
+            status = AmcAttachmentStatus.NEEDS_RETRY.name,
+            r2Key = current.r2Key,
+            uploadSessionId = current.uploadSessionId,
+            attemptNumber = current.attemptNumber,
+            lastErrorMessage = errorMessage,
+            lastErrorCode = errorCode,
+            retryCount = current.retryCount + 1,
+            expiresAtMillis = current.expiresAtMillis,
+            uploadedAtMillis = current.uploadedAtMillis,
+            readyAtMillis = current.readyAtMillis,
+            updatedAtMillis = now
+        )
+        AmcAttachmentQueueLogger.logQueueEvent(
+            level = Log.WARN,
+            event = "queue_needs_retry",
+            attachment = current.copy(
+                status = AmcAttachmentStatus.NEEDS_RETRY,
+                retryCount = current.retryCount + 1,
+                lastErrorCode = errorCode,
+                lastErrorMessage = errorMessage,
+                updatedAtMillis = now
+            ),
+            previousStatus = current.status,
+            extra = mapOf("retryable" to true, "reason" to errorMessage)
         )
     }
 
     suspend fun markAttachmentFailed(
         attachmentId: Long,
+        errorCode: String,
         errorMessage: String
     ) {
         val now = System.currentTimeMillis()
@@ -233,11 +318,28 @@ class AmcDraftRepository @Inject constructor(
             attachmentId = attachmentId,
             status = AmcAttachmentStatus.FAILED.name,
             r2Key = current.r2Key,
+            uploadSessionId = current.uploadSessionId,
+            attemptNumber = current.attemptNumber,
             lastErrorMessage = errorMessage,
+            lastErrorCode = errorCode,
             retryCount = current.retryCount + 1,
+            expiresAtMillis = current.expiresAtMillis,
             uploadedAtMillis = current.uploadedAtMillis,
             readyAtMillis = current.readyAtMillis,
             updatedAtMillis = now
+        )
+        AmcAttachmentQueueLogger.logQueueEvent(
+            level = Log.ERROR,
+            event = "queue_failed",
+            attachment = current.copy(
+                status = AmcAttachmentStatus.FAILED,
+                retryCount = current.retryCount + 1,
+                lastErrorCode = errorCode,
+                lastErrorMessage = errorMessage,
+                updatedAtMillis = now
+            ),
+            previousStatus = current.status,
+            extra = mapOf("retryable" to false, "reason" to errorMessage)
         )
     }
 

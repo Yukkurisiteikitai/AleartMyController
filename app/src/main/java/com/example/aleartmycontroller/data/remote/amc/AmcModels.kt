@@ -1,6 +1,7 @@
 package com.example.aleartmycontroller.data.remote.amc
 
 import com.example.aleartmycontroller.data.amc.AmcAttachmentType
+import com.example.aleartmycontroller.data.amc.AmcAttachmentClientResult
 import com.example.aleartmycontroller.data.amc.AmcVisibility
 
 data class AmcRecordInitRequest(
@@ -59,15 +60,20 @@ data class AmcAttachmentInitRequest(
 )
 
 data class AmcAttachmentInitResponse(
-    val attachmentId: String,
-    val r2Key: String,
+    val attachment: AmcAttachmentDescriptor,
+    val uploadSessionId: String,
+    val attemptNumber: Int,
     val uploadUrl: String,
-    val expiresAtMillis: Long
+    val expiresAtMillis: Long,
+    val retryable: Boolean
 )
 
 data class AmcAttachmentCompleteRequest(
     val attachmentId: String,
-    val r2Key: String,
+    val uploadSessionId: String,
+    val attemptNumber: Int,
+    val clientResult: AmcAttachmentClientResult,
+    val clientErrorCode: String? = null,
     val checksum: String? = null
 )
 
@@ -75,6 +81,41 @@ data class AmcAttachmentResponse(
     val attachmentId: String,
     val r2Key: String,
     val status: String
+)
+
+data class AmcAttachmentDescriptor(
+    val attachmentId: String,
+    val r2Key: String,
+    val status: String,
+    val mimeType: String,
+    val sizeBytes: Long,
+    val retryCount: Int,
+    val attemptNumber: Int,
+    val uploadSessionId: String? = null,
+    val expiresAtMillis: Long? = null,
+    val lastErrorCode: String? = null,
+    val lastErrorReason: String? = null
+)
+
+data class AmcAttachmentAttemptDescriptor(
+    val uploadSessionId: String,
+    val attemptNumber: Int,
+    val status: String,
+    val clientResult: AmcAttachmentClientResult? = null,
+    val clientErrorCode: String? = null,
+    val serverErrorCode: String? = null,
+    val serverErrorReason: String? = null,
+    val observedSizeBytes: Long? = null,
+    val observedContentType: String? = null,
+    val completedAtMillis: Long? = null
+)
+
+data class AmcAttachmentCompleteResponse(
+    val attachment: AmcAttachmentDescriptor,
+    val attempt: AmcAttachmentAttemptDescriptor,
+    val verified: Boolean,
+    val retryable: Boolean,
+    val reason: String? = null
 )
 
 data class AmcShareResolutionResponse(
@@ -98,4 +139,3 @@ data class AmcRecordAccessResponse(
     val deleted: Boolean,
     val viewerIsOwner: Boolean
 )
-

@@ -16,9 +16,16 @@ enum class AmcAttachmentType {
 enum class AmcAttachmentStatus {
     PENDING,
     UPLOADING,
+    NEEDS_RETRY,
     READY,
     FAILED,
+    EXPIRED,
     PURGED
+}
+
+enum class AmcAttachmentClientResult {
+    UPLOADED,
+    UPLOAD_FAILED
 }
 
 enum class AmcSyncState {
@@ -50,4 +57,3 @@ enum class AmcOutboxJobState {
     SUCCEEDED,
     FAILED
 }
-
