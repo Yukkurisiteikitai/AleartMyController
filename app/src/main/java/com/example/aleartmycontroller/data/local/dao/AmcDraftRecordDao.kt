@@ -25,6 +25,9 @@ interface AmcDraftRecordDao {
     @Query("SELECT * FROM amc_draft_records WHERE idempotencyKey = :idempotencyKey LIMIT 1")
     suspend fun findByIdempotencyKey(idempotencyKey: String): AmcDraftRecordEntity?
 
+    @Query("SELECT * FROM amc_draft_records WHERE eventId = :eventId AND deletedAtMillis IS NULL ORDER BY createdAtMillis DESC LIMIT 1")
+    suspend fun findActiveByEventId(eventId: Long): AmcDraftRecordEntity?
+
     @Query("SELECT * FROM amc_draft_records ORDER BY updatedAtMillis DESC")
     fun observeAll(): Flow<List<AmcDraftRecordEntity>>
 

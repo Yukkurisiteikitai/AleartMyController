@@ -171,6 +171,14 @@ class AmcDraftRepository @Inject constructor(
         }
     }
 
+    suspend fun getOrCreateDraftForEvent(eventId: Long, ownerUserId: String?): Long =
+        createDraftRecord(
+            eventId = eventId,
+            ownerUserId = ownerUserId,
+            visibility = AmcVisibility.PRIVATE,
+            idempotencyKey = "photo-draft:event:$eventId"
+        )
+
     suspend fun queueAttachment(
         draftRecordId: Long,
         type: AmcAttachmentType,

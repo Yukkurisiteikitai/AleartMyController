@@ -1,15 +1,30 @@
 package com.example.aleartmycontroller.ui.util
 
+import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Environment
+import android.provider.MediaStore
+import androidx.activity.result.contract.ActivityResultContract
 import androidx.core.content.FileProvider
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+class TakePictureWithUriGrant : ActivityResultContract<Uri, Boolean>() {
+    override fun createIntent(context: Context, input: Uri) =
+        Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
+            putExtra(MediaStore.EXTRA_OUTPUT, input)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        }
+
+    override fun parseResult(resultCode: Int, intent: Intent?) =
+        resultCode == Activity.RESULT_OK
+}
 
 object CameraUtils {
     /**

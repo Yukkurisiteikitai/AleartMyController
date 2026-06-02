@@ -69,7 +69,7 @@ fun AddRecordScreen(
     // カメラで撮影した画像URI
     var tempPhotoUri by remember { mutableStateOf<Uri?>(null) }
     val takePictureLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.TakePicture()
+        com.example.aleartmycontroller.ui.util.TakePictureWithUriGrant()
     ) { success ->
         if (success) {
             tempPhotoUri?.let { viewModel.addPhoto(it) }

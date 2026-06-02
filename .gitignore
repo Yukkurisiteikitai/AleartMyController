@@ -1,3 +1,4 @@
+supabase/secret
 flutter/
 *.iml
 .gradle

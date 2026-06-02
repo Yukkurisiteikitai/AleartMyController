@@ -5,7 +5,10 @@ import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.aleartmycontroller.data.amc.AmcAttachmentType
 import com.example.aleartmycontroller.data.local.entity.isLocalDraft
+import com.example.aleartmycontroller.data.repository.AmcDraftRepository
+import com.example.aleartmycontroller.data.repository.AuthRepository
 import com.example.aleartmycontroller.data.repository.RecordRepository
 import com.example.aleartmycontroller.ui.util.CameraUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -37,7 +40,9 @@ class AddRecordViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val recordRepository: RecordRepository,
     private val eventRepository: com.example.aleartmycontroller.data.repository.EventRepository,
-    private val togglRepository: com.example.aleartmycontroller.data.repository.TogglRepository
+    private val togglRepository: com.example.aleartmycontroller.data.repository.TogglRepository,
+    private val amcDraftRepository: AmcDraftRepository,
+    private val authRepository: AuthRepository
 ) : ViewModel() {
 
     private val eventId: Long = checkNotNull(savedStateHandle["eventId"])
@@ -63,11 +68,22 @@ class AddRecordViewModel @Inject constructor(
             runCatching {
                 val event = eventRepository.findById(eventId)
                     ?: error("Event not found: $eventId")
-                val jpegUri = withContext(Dispatchers.IO) {
-                    Uri.fromFile(CameraUtils.compressToJpeg(context, uri))
+                val jpegFile = withContext(Dispatchers.IO) {
+                    CameraUtils.compressToJpeg(context, uri)
                 }
+                val jpegUri = Uri.fromFile(jpegFile)
                 recordRepository.addPhotoRecord(event, jpegUri.toString())
                 logToToggl("Photo")
+
+                val userId = authRepository.currentSupabaseUserId()
+                val draftId = amcDraftRepository.getOrCreateDraftForEvent(eventId, userId)
+                amcDraftRepository.queueAttachment(
+                    draftRecordId = draftId,
+                    type = AmcAttachmentType.IMAGE,
+                    localUri = jpegUri.toString(),
+                    mimeType = "image/jpeg",
+                    sizeBytes = jpegFile.length()
+                )
             }
                 .onSuccess { _uiState.value = AddRecordUiState.Success }
                 .onFailure { _uiState.value = AddRecordUiState.Error(it.localizedMessage ?: "Unknown error") }

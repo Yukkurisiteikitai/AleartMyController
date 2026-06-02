@@ -45,8 +45,10 @@ fun AppNavHost(initialEventId: Long? = null) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
-    LaunchedEffect(onboardingComplete, currentDestination) {
-        if (onboardingComplete && currentDestination?.route == Screen.Setup.route) {
+    LaunchedEffect(onboardingComplete) {
+        if (onboardingComplete &&
+            navController.currentBackStackEntry?.destination?.route == Screen.Setup.route
+        ) {
             navController.navigate(Screen.EventList.route) {
                 popUpTo(Screen.Setup.route) { inclusive = true }
                 launchSingleTop = true
