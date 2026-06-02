@@ -200,6 +200,9 @@ fun SetupScreen(
                                     is TogglSyncOutcome.Failure -> {
                                         scope.launch { snackbarHostState.showSnackbar(outcome.message) }
                                     }
+                                    is TogglSyncOutcome.QuotaExceeded -> {
+                                        scope.launch { snackbarHostState.showSnackbar("APIレート制限中です。${outcome.resetsInSeconds}秒後に再試行してください") }
+                                    }
                                 }
                             }
                         },
