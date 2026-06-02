@@ -4,20 +4,12 @@ import java.text.Normalizer
 
 object AmcContentPolicy {
     val allowedImageMimeTypes = setOf(
-        "image/jpeg",
-        "image/png",
-        "image/webp",
-        "image/heic",
-        "image/heif"
+        "image/jpeg"
     )
 
     val allowedAudioMimeTypes = setOf(
-        "audio/mpeg",
         "audio/mp4",
-        "audio/aac",
-        "audio/ogg",
-        "audio/wav",
-        "audio/webm"
+        "audio/aac"
     )
 
     val allowedAttachmentMimeTypes: Set<String> = allowedImageMimeTypes + allowedAudioMimeTypes

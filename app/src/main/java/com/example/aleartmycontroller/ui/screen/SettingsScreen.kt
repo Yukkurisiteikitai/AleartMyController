@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.aleartmycontroller.BuildConfig
 import com.example.aleartmycontroller.ui.viewmodel.PRESET_OPTIONS
 import com.example.aleartmycontroller.ui.viewmodel.SettingsViewModel
 
@@ -15,6 +16,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.Scope
 import androidx.compose.ui.platform.LocalContext
 
@@ -38,8 +40,11 @@ fun SettingsScreen(
     // Google Sign-In Launcher
     val googleSignInLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
-    ) {
-        viewModel.updateUserInfo()
+    ) { result ->
+        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+        runCatching { task.getResult(ApiException::class.java) }
+            .onSuccess { account -> viewModel.handleSignIn(account) }
+            .onFailure { viewModel.updateUserInfo() }
     }
 
     if (showCustomDialog) {
@@ -87,6 +92,7 @@ fun SettingsScreen(
                         Button(onClick = {
                             val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
                                 .requestEmail()
+                                .requestIdToken(BuildConfig.SUPABASE_GOOGLE_WEB_CLIENT_ID)
                                 .requestScopes(Scope("https://www.googleapis.com/auth/calendar.events"))
                                 .build()
                             val client = GoogleSignIn.getClient(context, gso)

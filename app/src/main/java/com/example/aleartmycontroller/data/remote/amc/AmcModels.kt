@@ -79,13 +79,13 @@ data class AmcAttachmentCompleteRequest(
 
 data class AmcAttachmentResponse(
     val attachmentId: String,
-    val r2Key: String,
+    val storagePath: String,
     val status: String
 )
 
 data class AmcAttachmentDescriptor(
     val attachmentId: String,
-    val r2Key: String,
+    val storagePath: String,
     val status: String,
     val mimeType: String,
     val sizeBytes: Long,

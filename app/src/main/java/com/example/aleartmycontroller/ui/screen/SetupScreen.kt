@@ -42,10 +42,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.aleartmycontroller.BuildConfig
 import com.example.aleartmycontroller.data.repository.TogglSyncOutcome
 import com.example.aleartmycontroller.ui.viewmodel.SetupViewModel
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.Scope
 import kotlinx.coroutines.launch
 
@@ -66,8 +68,11 @@ fun SetupScreen(
 
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
-    ) {
-        viewModel.refreshGoogleState()
+    ) { result ->
+        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+        runCatching { task.getResult(ApiException::class.java) }
+            .onSuccess { account -> viewModel.handleSignIn(account) }
+            .onFailure { viewModel.refreshGoogleState() }
     }
 
     if (showSuccessDialog) {
@@ -125,6 +130,7 @@ fun SetupScreen(
                     Button(onClick = {
                         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
                             .requestEmail()
+                            .requestIdToken(BuildConfig.SUPABASE_GOOGLE_WEB_CLIENT_ID)
                             .requestScopes(Scope("https://www.googleapis.com/auth/calendar.events"))
                             .build()
                         val client = GoogleSignIn.getClient(context, gso)

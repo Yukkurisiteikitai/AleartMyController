@@ -63,7 +63,7 @@ object AmcAttachmentQueueLogger {
                     "errorCode" to attachment.lastErrorCode,
                     "mimeType" to attachment.mimeType,
                     "sizeBytes" to attachment.sizeBytes,
-                    "r2Key" to attachment.r2Key,
+                    "storagePath" to attachment.storagePath,
                     "localUri" to attachment.localUri
                 ) + extra
             ),
@@ -94,7 +94,7 @@ object AmcAttachmentQueueLogger {
                     "expiresAtMillis" to response.expiresAtMillis,
                     "reason" to response.attachment.lastErrorReason,
                     "errorCode" to response.attachment.lastErrorCode,
-                    "r2Key" to response.attachment.r2Key,
+                    "storagePath" to response.attachment.storagePath,
                     "mimeType" to response.attachment.mimeType,
                     "sizeBytes" to response.attachment.sizeBytes,
                     "httpStatus" to httpStatus
@@ -131,7 +131,7 @@ object AmcAttachmentQueueLogger {
                     "clientResult" to response.attempt.clientResult,
                     "observedSizeBytes" to response.attempt.observedSizeBytes,
                     "observedContentType" to response.attempt.observedContentType,
-                    "r2Key" to response.attachment.r2Key,
+                    "storagePath" to response.attachment.storagePath,
                     "mimeType" to response.attachment.mimeType,
                     "sizeBytes" to response.attachment.sizeBytes,
                     "httpStatus" to httpStatus

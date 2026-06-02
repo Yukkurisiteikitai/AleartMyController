@@ -11,6 +11,7 @@ import com.example.aleartmycontroller.data.repository.TogglSyncOutcome.Failure
 import com.example.aleartmycontroller.data.repository.TogglSyncOutcome.NoPendingAction
 import com.example.aleartmycontroller.data.repository.TogglSyncOutcome.NoToken
 import com.example.aleartmycontroller.data.repository.TogglSyncOutcome.Success
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -57,6 +58,11 @@ class SetupViewModel @Inject constructor(
 
     fun refreshGoogleState() {
         _googleEmail.value = authRepository.getLastSignedInAccount()?.email
+    }
+
+    fun handleSignIn(account: GoogleSignInAccount) {
+        _googleEmail.value = account.email
+        viewModelScope.launch { authRepository.signInWithSupabase(account) }
     }
 
     fun updateTokenInput(value: String) {

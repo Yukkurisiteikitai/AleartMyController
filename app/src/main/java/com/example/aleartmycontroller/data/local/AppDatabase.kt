@@ -61,7 +61,7 @@ class RecordTypeConverter {
         TogglPendingActionEntity::class,
         TogglTimeEntryCacheEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = true
 )
 @TypeConverters(RecordTypeConverter::class, AmcTypeConverters::class)
@@ -342,17 +342,72 @@ abstract class AppDatabase : RoomDatabase() {
 
         val MIGRATION_6_7 = object : Migration(6, 7) {
             override fun migrate(db: SupportSQLiteDatabase) {
+                // デバイス上で既にカラムが存在する場合にクラッシュしないよう PRAGMA で確認してから ADD COLUMN する
+                val existing = mutableSetOf<String>()
+                db.query("PRAGMA table_info(`amc_attachment_queue`)").use { cursor ->
+                    while (cursor.moveToNext()) existing.add(cursor.getString(1))
+                }
+                if ("uploadSessionId" !in existing)
+                    db.execSQL("ALTER TABLE `amc_attachment_queue` ADD COLUMN `uploadSessionId` TEXT")
+                if ("attemptNumber" !in existing)
+                    db.execSQL("ALTER TABLE `amc_attachment_queue` ADD COLUMN `attemptNumber` INTEGER NOT NULL DEFAULT 0")
+                if ("lastErrorCode" !in existing)
+                    db.execSQL("ALTER TABLE `amc_attachment_queue` ADD COLUMN `lastErrorCode` TEXT")
+                if ("expiresAtMillis" !in existing)
+                    db.execSQL("ALTER TABLE `amc_attachment_queue` ADD COLUMN `expiresAtMillis` INTEGER")
+            }
+        }
+
+        // v7→v8: r2Key → storagePath (Cloudflare R2 から Supabase Storage へ移行)
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
-                    "ALTER TABLE `amc_attachment_queue` ADD COLUMN `uploadSessionId` TEXT"
+                    """
+                    CREATE TABLE `amc_attachment_queue_new` (
+                        `attachmentId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `draftRecordId` INTEGER NOT NULL,
+                        `type` TEXT NOT NULL,
+                        `localUri` TEXT NOT NULL,
+                        `storagePath` TEXT,
+                        `mimeType` TEXT NOT NULL,
+                        `sizeBytes` INTEGER NOT NULL,
+                        `checksum` TEXT,
+                        `status` TEXT NOT NULL,
+                        `uploadSessionId` TEXT,
+                        `attemptNumber` INTEGER NOT NULL DEFAULT 0,
+                        `retryCount` INTEGER NOT NULL,
+                        `lastErrorCode` TEXT,
+                        `lastErrorMessage` TEXT,
+                        `expiresAtMillis` INTEGER,
+                        `uploadedAtMillis` INTEGER,
+                        `readyAtMillis` INTEGER,
+                        `createdAtMillis` INTEGER NOT NULL,
+                        `updatedAtMillis` INTEGER NOT NULL,
+                        `idempotencyKey` TEXT NOT NULL
+                    )
+                    """.trimIndent()
                 )
                 db.execSQL(
-                    "ALTER TABLE `amc_attachment_queue` ADD COLUMN `attemptNumber` INTEGER NOT NULL DEFAULT 0"
+                    """
+                    INSERT INTO `amc_attachment_queue_new`
+                    SELECT `attachmentId`, `draftRecordId`, `type`, `localUri`, `r2Key`,
+                           `mimeType`, `sizeBytes`, `checksum`, `status`, `uploadSessionId`,
+                           `attemptNumber`, `retryCount`, `lastErrorCode`, `lastErrorMessage`,
+                           `expiresAtMillis`, `uploadedAtMillis`, `readyAtMillis`,
+                           `createdAtMillis`, `updatedAtMillis`, `idempotencyKey`
+                    FROM `amc_attachment_queue`
+                    """.trimIndent()
+                )
+                db.execSQL("DROP TABLE `amc_attachment_queue`")
+                db.execSQL("ALTER TABLE `amc_attachment_queue_new` RENAME TO `amc_attachment_queue`")
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_amc_attachment_queue_draftRecordId` ON `amc_attachment_queue`(`draftRecordId`)"
                 )
                 db.execSQL(
-                    "ALTER TABLE `amc_attachment_queue` ADD COLUMN `lastErrorCode` TEXT"
+                    "CREATE INDEX IF NOT EXISTS `index_amc_attachment_queue_status` ON `amc_attachment_queue`(`status`)"
                 )
                 db.execSQL(
-                    "ALTER TABLE `amc_attachment_queue` ADD COLUMN `expiresAtMillis` INTEGER"
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_amc_attachment_queue_idempotencyKey` ON `amc_attachment_queue`(`idempotencyKey`)"
                 )
             }
         }

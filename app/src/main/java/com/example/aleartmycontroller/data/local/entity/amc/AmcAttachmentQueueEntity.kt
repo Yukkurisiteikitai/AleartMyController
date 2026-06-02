@@ -19,7 +19,7 @@ data class AmcAttachmentQueueEntity(
     val draftRecordId: Long,
     val type: AmcAttachmentType,
     val localUri: String,
-    val r2Key: String? = null,
+    val storagePath: String? = null,
     val mimeType: String,
     val sizeBytes: Long,
     val checksum: String? = null,

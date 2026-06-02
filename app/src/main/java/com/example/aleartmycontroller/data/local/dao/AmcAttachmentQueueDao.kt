@@ -24,11 +24,14 @@ interface AmcAttachmentQueueDao {
     @Query("SELECT * FROM amc_attachment_queue WHERE status IN ('PENDING', 'NEEDS_RETRY') ORDER BY updatedAtMillis ASC")
     fun observePendingUploads(): Flow<List<AmcAttachmentQueueEntity>>
 
+    @Query("SELECT * FROM amc_attachment_queue WHERE status IN ('PENDING', 'NEEDS_RETRY') ORDER BY updatedAtMillis ASC")
+    suspend fun getPendingOnce(): List<AmcAttachmentQueueEntity>
+
     @Query(
         """
         UPDATE amc_attachment_queue
         SET status = :status,
-            r2Key = :r2Key,
+            storagePath = :storagePath,
             uploadSessionId = :uploadSessionId,
             attemptNumber = :attemptNumber,
             lastErrorMessage = :lastErrorMessage,
@@ -44,7 +47,7 @@ interface AmcAttachmentQueueDao {
     suspend fun updateStatus(
         attachmentId: Long,
         status: String,
-        r2Key: String? = null,
+        storagePath: String? = null,
         uploadSessionId: String? = null,
         attemptNumber: Int,
         lastErrorMessage: String? = null,

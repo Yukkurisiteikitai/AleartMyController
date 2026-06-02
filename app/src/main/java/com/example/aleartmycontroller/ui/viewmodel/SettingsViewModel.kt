@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.aleartmycontroller.data.repository.AmcDraftRepository
 import com.example.aleartmycontroller.data.preferences.AppPreferences
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.SharingStarted
@@ -33,6 +34,11 @@ class SettingsViewModel @Inject constructor(
 
     fun updateUserInfo() {
         _userEmail.value = authRepository.getLastSignedInAccount()?.email
+    }
+
+    fun handleSignIn(account: GoogleSignInAccount) {
+        _userEmail.value = account.email
+        viewModelScope.launch { authRepository.signInWithSupabase(account) }
     }
 
     val intervalMinutes: StateFlow<Int> = prefs.intervalMinutes

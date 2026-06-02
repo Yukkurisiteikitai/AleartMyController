@@ -24,9 +24,12 @@ class AmcContentPolicyTest {
     }
 
     @Test
-    fun allowedMimeTypes_includeCommonImageAndAudioFormats() {
+    fun allowedMimeTypes_acceptJpegAndAac() {
         assertTrue(AmcContentPolicy.isAllowedAttachmentMime("image/jpeg"))
-        assertTrue(AmcContentPolicy.isAllowedAttachmentMime("audio/mpeg"))
+        assertTrue(AmcContentPolicy.isAllowedAttachmentMime("audio/mp4"))
+        assertTrue(AmcContentPolicy.isAllowedAttachmentMime("audio/aac"))
+        assertTrue(!AmcContentPolicy.isAllowedAttachmentMime("image/png"))
+        assertTrue(!AmcContentPolicy.isAllowedAttachmentMime("audio/mpeg"))
         assertTrue(!AmcContentPolicy.isAllowedAttachmentMime("application/pdf"))
     }
 }

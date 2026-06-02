@@ -47,7 +47,7 @@ class AmcAttachmentQueueLogFormatterTest {
         val initResponse = AmcAttachmentInitResponse(
             attachment = AmcAttachmentDescriptor(
                 attachmentId = "att-1",
-                r2Key = "r2/key",
+                storagePath = "r2/key",
                 status = "uploading",
                 mimeType = "image/jpeg",
                 sizeBytes = 128,

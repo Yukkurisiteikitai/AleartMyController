@@ -1,8 +1,18 @@
 package com.example.aleartmycontroller.data.repository
 
+import android.content.Context
 import androidx.room.withTransaction
 import android.util.Log
+import androidx.work.BackoffPolicy
+import androidx.work.Constraints
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import com.example.aleartmycontroller.data.amc.AmcAttachmentStatus
+import com.example.aleartmycontroller.worker.AmcAttachmentUploadWorker
+import dagger.hilt.android.qualifiers.ApplicationContext
+import java.util.concurrent.TimeUnit
 import com.example.aleartmycontroller.data.amc.AmcAttachmentType
 import com.example.aleartmycontroller.data.amc.AmcContentPolicy
 import com.example.aleartmycontroller.data.amc.AmcIdempotency
@@ -29,6 +39,7 @@ class AmcConflictException(message: String) : IllegalStateException(message)
 
 @Singleton
 class AmcDraftRepository @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val db: AppDatabase,
     private val draftDao: AmcDraftRecordDao,
     private val revisionDao: AmcRecordRevisionDao,
@@ -195,7 +206,19 @@ class AmcDraftRepository @Inject constructor(
             attachment = attachment.copy(attachmentId = attachmentId),
             extra = mapOf("idempotencyKey" to idempotencyKey)
         )
+        enqueueUploadWorker()
         attachmentId
+    }
+
+    private fun enqueueUploadWorker() {
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            "amc_attachment_upload",
+            ExistingWorkPolicy.KEEP,
+            OneTimeWorkRequestBuilder<AmcAttachmentUploadWorker>()
+                .setConstraints(Constraints(requiredNetworkType = NetworkType.CONNECTED))
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+                .build()
+        )
     }
 
     suspend fun markAttachmentUploading(attachmentId: Long) {
@@ -212,7 +235,7 @@ class AmcDraftRepository @Inject constructor(
         attachmentDao.updateStatus(
             attachmentId = attachmentId,
             status = AmcAttachmentStatus.UPLOADING.name,
-            r2Key = current.r2Key,
+            storagePath = current.storagePath,
             uploadSessionId = uploadSessionId,
             attemptNumber = current.attemptNumber + 1,
             lastErrorMessage = null,
@@ -239,14 +262,14 @@ class AmcDraftRepository @Inject constructor(
 
     suspend fun markAttachmentReady(
         attachmentId: Long,
-        r2Key: String
+        storagePath: String
     ) {
         val now = System.currentTimeMillis()
         val current = attachmentDao.findById(attachmentId) ?: error("Attachment not found: $attachmentId")
         attachmentDao.updateStatus(
             attachmentId = attachmentId,
             status = AmcAttachmentStatus.READY.name,
-            r2Key = r2Key,
+            storagePath = storagePath,
             uploadSessionId = current.uploadSessionId,
             attemptNumber = current.attemptNumber,
             lastErrorMessage = null,
@@ -262,7 +285,7 @@ class AmcDraftRepository @Inject constructor(
             event = "queue_ready",
             attachment = current.copy(
                 status = AmcAttachmentStatus.READY,
-                r2Key = r2Key,
+                storagePath = storagePath,
                 uploadedAtMillis = now,
                 readyAtMillis = now,
                 updatedAtMillis = now
@@ -281,7 +304,7 @@ class AmcDraftRepository @Inject constructor(
         attachmentDao.updateStatus(
             attachmentId = attachmentId,
             status = AmcAttachmentStatus.NEEDS_RETRY.name,
-            r2Key = current.r2Key,
+            storagePath = current.storagePath,
             uploadSessionId = current.uploadSessionId,
             attemptNumber = current.attemptNumber,
             lastErrorMessage = errorMessage,
@@ -317,7 +340,7 @@ class AmcDraftRepository @Inject constructor(
         attachmentDao.updateStatus(
             attachmentId = attachmentId,
             status = AmcAttachmentStatus.FAILED.name,
-            r2Key = current.r2Key,
+            storagePath = current.storagePath,
             uploadSessionId = current.uploadSessionId,
             attemptNumber = current.attemptNumber,
             lastErrorMessage = errorMessage,
