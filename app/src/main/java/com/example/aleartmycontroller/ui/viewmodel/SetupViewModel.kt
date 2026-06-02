@@ -27,8 +27,7 @@ data class SetupUiState(
     val togglTokenConfigured: Boolean = false,
     val togglSyncStatus: String = "UNCONFIGURED",
     val togglPendingCount: Int = 0,
-    val togglLastError: String? = null,
-    val tokenInput: String = ""
+    val togglLastError: String? = null
 )
 
 @HiltViewModel
@@ -65,21 +64,9 @@ class SetupViewModel @Inject constructor(
         viewModelScope.launch { authRepository.signInWithSupabase(account) }
     }
 
-    fun updateTokenInput(value: String) {
-        _tokenInput = value
-    }
-
-    private var _tokenInput: String = ""
-        set(value) {
-            field = value
-        }
-
-    fun currentTokenInput(): String = _tokenInput
-
     fun saveToken(token: String) {
         viewModelScope.launch {
             togglRepository.saveToken(token)
-            _tokenInput = ""
         }
     }
 

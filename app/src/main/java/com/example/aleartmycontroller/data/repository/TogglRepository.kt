@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import retrofit2.HttpException
 import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -29,7 +30,11 @@ sealed class TogglSyncOutcome {
     data object NoPendingAction : TogglSyncOutcome()
     data object Success : TogglSyncOutcome()
     data class Failure(val message: String) : TogglSyncOutcome()
+    data class QuotaExceeded(val resetsInSeconds: Long) : TogglSyncOutcome()
 }
+
+internal class TogglQuotaExceededException(val resetsInSeconds: Long) :
+    Exception("APIの利用上限に達しました。${resetsInSeconds / 60}分後にリセット")
 
 @Singleton
 class TogglRepository @Inject constructor(
@@ -45,6 +50,7 @@ class TogglRepository @Inject constructor(
     private val syncMutex = Mutex()
     private val networkSpacingMutex = Mutex()
     private var lastNetworkCallAtMillis = 0L
+    @Volatile private var quotaResetsAtMillis: Long = 0L
 
     fun observeSyncState(): Flow<TogglSyncStateEntity> {
         return syncStateDao.observeState().map { it ?: defaultState(tokenStore.hasToken()) }
@@ -123,6 +129,15 @@ class TogglRepository @Inject constructor(
             return TogglSyncOutcome.NoToken
         }
 
+        val quotaRemainingSecs = (quotaResetsAtMillis - System.currentTimeMillis() + 999) / 1000
+        if (quotaRemainingSecs > 0) {
+            updateState(
+                syncStatus = STATUS_QUOTA_EXCEEDED,
+                lastErrorMessage = "APIの利用上限です。あと${quotaRemainingSecs / 60}分でリセット"
+            )
+            return TogglSyncOutcome.QuotaExceeded(quotaRemainingSecs)
+        }
+
         ensureState()
         updateState(
             syncStatus = STATUS_SYNCING,
@@ -150,18 +165,27 @@ class TogglRepository @Inject constructor(
         for (action in pending) {
             val result = runCatching { executeAction(action) }
             result.onFailure { error ->
+                val msg = error.localizedMessage ?: "同期に失敗しました"
                 pendingActionDao.markFailed(
                     actionId = action.actionId,
                     attemptCount = action.attemptCount + 1,
                     lastAttemptAtMillis = System.currentTimeMillis(),
-                    lastErrorMessage = error.localizedMessage ?: "同期に失敗しました"
+                    lastErrorMessage = msg
                 )
+                if (error is TogglQuotaExceededException) {
+                    updateState(
+                        syncStatus = STATUS_QUOTA_EXCEEDED,
+                        lastAttemptAtMillis = System.currentTimeMillis(),
+                        lastErrorMessage = msg
+                    )
+                    return TogglSyncOutcome.QuotaExceeded(error.resetsInSeconds)
+                }
                 updateState(
                     syncStatus = STATUS_FAILED,
                     lastAttemptAtMillis = System.currentTimeMillis(),
-                    lastErrorMessage = error.localizedMessage ?: "同期に失敗しました"
+                    lastErrorMessage = msg
                 )
-                return TogglSyncOutcome.Failure(error.localizedMessage ?: "同期に失敗しました")
+                return TogglSyncOutcome.Failure(msg)
             }
             pendingActionDao.deleteById(action.actionId)
         }
@@ -344,13 +368,28 @@ class TogglRepository @Inject constructor(
     private suspend fun <T> withRateLimit(block: suspend () -> T): T {
         return networkSpacingMutex.withLock {
             val now = System.currentTimeMillis()
+            val quotaRemaining = quotaResetsAtMillis - now
+            if (quotaRemaining > 0) {
+                throw TogglQuotaExceededException((quotaRemaining + 999) / 1000)
+            }
             val elapsed = now - lastNetworkCallAtMillis
             if (lastNetworkCallAtMillis > 0 && elapsed < NETWORK_MIN_INTERVAL_MS) {
                 delay(NETWORK_MIN_INTERVAL_MS - elapsed)
             }
-            val result = block()
-            lastNetworkCallAtMillis = System.currentTimeMillis()
-            result
+            try {
+                val result = block()
+                lastNetworkCallAtMillis = System.currentTimeMillis()
+                result
+            } catch (e: HttpException) {
+                lastNetworkCallAtMillis = System.currentTimeMillis()
+                if (e.code() == 402) {
+                    val resetsIn = e.response()?.headers()?.get("x-toggl-quota-resets-in")
+                        ?.toLongOrNull() ?: 3600L
+                    quotaResetsAtMillis = System.currentTimeMillis() + resetsIn * 1000
+                    throw TogglQuotaExceededException(resetsIn)
+                }
+                throw e
+            }
         }
     }
 
@@ -398,5 +437,6 @@ class TogglRepository @Inject constructor(
         const val STATUS_FAILED = "FAILED"
         const val STATUS_SYNCED = "SYNCED"
         const val STATUS_QUEUED = "QUEUED"
+        const val STATUS_QUOTA_EXCEEDED = "QUOTA_EXCEEDED"
     }
 }

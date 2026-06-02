@@ -42,8 +42,8 @@ class AppPreferences @Inject constructor(
         /** カスタムインターバル（分） */
         val KEY_CUSTOM_INTERVAL_MINUTES = intPreferencesKey("custom_interval_minutes")
 
-        /** 初回セットアップ完了フラグ */
-        val KEY_FIRST_RUN_SETUP_COMPLETE = intPreferencesKey("first_run_setup_complete")
+        /** 初回セットアップ完了フラグ（bool版。旧 int キー "first_run_setup_complete" とは別名） */
+        val KEY_FIRST_RUN_SETUP_COMPLETE = booleanPreferencesKey("setup_complete")
 
         /** AMC クラウド同期の有効フラグ（デフォルト: 有効） */
         val KEY_AMC_CLOUD_SYNC_ENABLED = booleanPreferencesKey("amc_cloud_sync_enabled")
@@ -70,7 +70,7 @@ class AppPreferences @Inject constructor(
     }
 
     val firstRunSetupComplete: Flow<Boolean> = context.dataStore.data.map { prefs ->
-        (prefs[KEY_FIRST_RUN_SETUP_COMPLETE] ?: 0) == 1
+        prefs[KEY_FIRST_RUN_SETUP_COMPLETE] ?: false
     }
 
     suspend fun setIntervalMinutes(minutes: Int) {
@@ -90,7 +90,7 @@ class AppPreferences @Inject constructor(
     }
 
     suspend fun setFirstRunSetupComplete(completed: Boolean) {
-        context.dataStore.edit { it[KEY_FIRST_RUN_SETUP_COMPLETE] = if (completed) 1 else 0 }
+        context.dataStore.edit { it[KEY_FIRST_RUN_SETUP_COMPLETE] = completed }
     }
 
     val cloudSyncEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
