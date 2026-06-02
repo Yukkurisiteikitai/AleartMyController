@@ -5,6 +5,7 @@ import com.example.aleartmycontroller.data.local.dao.ObservationEventDao
 import com.example.aleartmycontroller.data.local.entity.EventEntity
 import com.example.aleartmycontroller.data.local.entity.LOCAL_DRAFT_GOOGLE_ID_PREFIX
 import com.example.aleartmycontroller.data.local.entity.isLocalDraft
+import com.example.aleartmycontroller.data.amc.AmcContentPolicy
 import com.example.aleartmycontroller.data.remote.google.GoogleCalendarApi
 import com.example.aleartmycontroller.data.remote.google.CalendarEventDateTimeRequest
 import com.example.aleartmycontroller.data.remote.google.CalendarEventPatchRequest
@@ -147,10 +148,11 @@ class EventRepository @Inject constructor(
                 remote.description?.takeIf { it.isNotBlank() },
                 memoText.trim()
             ).joinToString("\n\n")
+            val description = AmcContentPolicy.buildCalendarMirrorBody(mergedDescription)
 
             calendarApi.patchEvent(
                 eventId = event.googleEventId,
-                body = CalendarEventPatchRequest(description = mergedDescription)
+                body = CalendarEventPatchRequest(description = description)
             )
         }
     }

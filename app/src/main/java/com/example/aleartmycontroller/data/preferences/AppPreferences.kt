@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -41,6 +42,12 @@ class AppPreferences @Inject constructor(
         /** カスタムインターバル（分） */
         val KEY_CUSTOM_INTERVAL_MINUTES = intPreferencesKey("custom_interval_minutes")
 
+        /** 初回セットアップ完了フラグ（bool版。旧 int キー "first_run_setup_complete" とは別名） */
+        val KEY_FIRST_RUN_SETUP_COMPLETE = booleanPreferencesKey("setup_complete")
+
+        /** AMC クラウド同期の有効フラグ（デフォルト: 有効） */
+        val KEY_AMC_CLOUD_SYNC_ENABLED = booleanPreferencesKey("amc_cloud_sync_enabled")
+
         val DEFAULT_PRESET_ORDER = "1,3,5,10,25,30,60,0"
         const val DEFAULT_INTERVAL_MINUTES = 60
     }
@@ -62,6 +69,10 @@ class AppPreferences @Inject constructor(
         prefs[KEY_CUSTOM_INTERVAL_MINUTES] ?: 30
     }
 
+    val firstRunSetupComplete: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_FIRST_RUN_SETUP_COMPLETE] ?: false
+    }
+
     suspend fun setIntervalMinutes(minutes: Int) {
         context.dataStore.edit { it[KEY_INTERVAL_MINUTES] = minutes }
     }
@@ -76,5 +87,17 @@ class AppPreferences @Inject constructor(
 
     suspend fun setCustomIntervalMinutes(minutes: Int) {
         context.dataStore.edit { it[KEY_CUSTOM_INTERVAL_MINUTES] = minutes }
+    }
+
+    suspend fun setFirstRunSetupComplete(completed: Boolean) {
+        context.dataStore.edit { it[KEY_FIRST_RUN_SETUP_COMPLETE] = completed }
+    }
+
+    val cloudSyncEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_AMC_CLOUD_SYNC_ENABLED] ?: true
+    }
+
+    suspend fun setCloudSyncEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_AMC_CLOUD_SYNC_ENABLED] = enabled }
     }
 }

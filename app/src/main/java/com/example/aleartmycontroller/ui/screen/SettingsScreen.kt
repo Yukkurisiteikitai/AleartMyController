@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.aleartmycontroller.BuildConfig
 import com.example.aleartmycontroller.ui.viewmodel.PRESET_OPTIONS
 import com.example.aleartmycontroller.ui.viewmodel.SettingsViewModel
 
@@ -15,6 +16,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.Scope
 import androidx.compose.ui.platform.LocalContext
 
@@ -24,6 +26,7 @@ import androidx.compose.material.icons.Icons
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onOpenSetup: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
@@ -31,13 +34,18 @@ fun SettingsScreen(
     val notificationsEnabled by viewModel.notificationsEnabled.collectAsStateWithLifecycle()
     val customInterval by viewModel.customIntervalMinutes.collectAsStateWithLifecycle()
     val userEmail by viewModel.userEmail.collectAsStateWithLifecycle()
+    val amcQueueSummary by viewModel.amcQueueSummary.collectAsStateWithLifecycle()
+    val cloudSyncEnabled by viewModel.cloudSyncEnabled.collectAsStateWithLifecycle()
     var showCustomDialog by remember { mutableStateOf(false) }
 
     // Google Sign-In Launcher
     val googleSignInLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
-    ) {
-        viewModel.updateUserInfo()
+    ) { result ->
+        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+        runCatching { task.getResult(ApiException::class.java) }
+            .onSuccess { account -> viewModel.handleSignIn(account) }
+            .onFailure { viewModel.updateUserInfo() }
     }
 
     if (showCustomDialog) {
@@ -85,6 +93,7 @@ fun SettingsScreen(
                         Button(onClick = {
                             val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
                                 .requestEmail()
+                                .requestIdToken(BuildConfig.SUPABASE_GOOGLE_WEB_CLIENT_ID)
                                 .requestScopes(Scope("https://www.googleapis.com/auth/calendar.events"))
                                 .build()
                             val client = GoogleSignIn.getClient(context, gso)
@@ -113,6 +122,51 @@ fun SettingsScreen(
                     onPresetSelected = { minutes ->
                         if (minutes == 0) showCustomDialog = true
                         else viewModel.selectInterval(minutes)
+                    }
+                )
+            }
+
+            item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
+
+            item {
+                ListItem(
+                    headlineContent = { Text("初回セットアップ") },
+                    supportingContent = { Text("Google 連携と Toggl token を順番に再設定できます") },
+                    trailingContent = {
+                        Button(onClick = onOpenSetup) {
+                            Text("開く")
+                        }
+                    }
+                )
+            }
+
+            item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
+
+            // ---- AMC 状態 ----
+            item {
+                Text(
+                    "AMC",
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
+            item {
+                ListItem(
+                    headlineContent = { Text("ローカルキュー") },
+                    supportingContent = { Text(amcQueueSummary) }
+                )
+            }
+            item {
+                ListItem(
+                    headlineContent = { Text("クラウドに同期する") },
+                    supportingContent = {
+                        Text(if (cloudSyncEnabled) "テキスト・写真を Supabase に送信します" else "ローカルのみ保管します")
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = cloudSyncEnabled,
+                            onCheckedChange = viewModel::setCloudSyncEnabled
+                        )
                     }
                 )
             }

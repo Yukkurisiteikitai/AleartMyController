@@ -3,6 +3,7 @@ package com.example.aleartmycontroller.data.repository
 import com.example.aleartmycontroller.data.local.dao.MemoDao
 import com.example.aleartmycontroller.data.local.dao.PhotoDao
 import com.example.aleartmycontroller.data.local.dao.RecordDao
+import com.example.aleartmycontroller.data.amc.AmcContentPolicy
 import com.example.aleartmycontroller.data.local.entity.EventEntity
 import com.example.aleartmycontroller.data.local.entity.MemoEntity
 import com.example.aleartmycontroller.data.local.entity.PhotoEntity
@@ -58,6 +59,7 @@ class RecordRepository @Inject constructor(
         text: String,
         isVoice: Boolean = false
     ): Long {
+        val normalizedText = AmcContentPolicy.normalizeBodyForStorage(text)
         val obsEventId = observationEventRepository.findOrCreate(event)
         val record = RecordEntity(
             obsEventId = obsEventId,
@@ -65,7 +67,7 @@ class RecordRepository @Inject constructor(
             recordType = RecordType.MEMO
         )
         val recordId = recordDao.insert(record)
-        memoDao.insert(MemoEntity(recordId = recordId, memoText = text, isVoiceMemo = isVoice))
+        memoDao.insert(MemoEntity(recordId = recordId, memoText = normalizedText, isVoiceMemo = isVoice))
         return recordId
     }
 

@@ -8,6 +8,10 @@ plugins {
     alias(libs.plugins.hilt)
 }
 
+val localProps = Properties().apply {
+    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+}
+
 android {
     namespace = "com.example.aleartmycontroller"
     compileSdk = 36
@@ -21,22 +25,9 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // local.properties からトークンを読み込む
-        val localProperties = Properties()
-        val localPropertiesFile = rootProject.file("local.properties")
-        if (localPropertiesFile.exists()) {
-            localPropertiesFile.inputStream().use { localProperties.load(it) }
-        }
-        buildConfigField(
-            "String",
-            "GOOGLE_CALENDAR_API_KEY",
-            "\"${localProperties.getProperty("GOOGLE_CALENDAR_API_KEY", "")}\""
-        )
-        buildConfigField(
-            "String",
-            "TOGGL_API_TOKEN",
-            "\"${localProperties.getProperty("TOGGL_API_TOKEN", "")}\""
-        )
+        buildConfigField("String", "SUPABASE_URL", "\"${localProps.getProperty("SUPABASE_URL", "")}\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"${localProps.getProperty("SUPABASE_ANON_KEY", "")}\"")
+        buildConfigField("String", "SUPABASE_GOOGLE_WEB_CLIENT_ID", "\"${localProps.getProperty("SUPABASE_GOOGLE_WEB_CLIENT_ID", "")}\"")
     }
 
     buildTypes {
@@ -108,12 +99,20 @@ dependencies {
 
     // DataStore
     implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.security.crypto)
 
     // Accompanist Permissions
     implementation(libs.accompanist.permissions)
 
     // Vico charts
     implementation(libs.vico.compose.m3)
+
+    // Supabase
+    implementation(platform(libs.supabase.bom))
+    implementation(libs.supabase.auth)
+    implementation(libs.supabase.postgrest)
+    implementation(libs.supabase.storage)
+    implementation(libs.ktor.android)
 
     // Hilt
     implementation(libs.hilt.android)
@@ -128,4 +127,5 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+    debugImplementation(libs.logback.android)
 }
