@@ -506,3 +506,107 @@ suspend fun downloadToLocal(attachmentId: Long, storagePath: String, mimeType: S
 - [app/src/main/java/com/example/aleartmycontroller/data/repository/AmcStorageRepository.kt](/Users/yuuto/learn_lab/AleartMyController/app/src/main/java/com/example/aleartmycontroller/data/repository/AmcStorageRepository.kt)
 - [app/src/main/java/com/example/aleartmycontroller/data/preferences/AppPreferences.kt](/Users/yuuto/learn_lab/AleartMyController/app/src/main/java/com/example/aleartmycontroller/data/preferences/AppPreferences.kt)
 - [app/src/main/java/com/example/aleartmycontroller/ui/viewmodel/AddRecordViewModel.kt](/Users/yuuto/learn_lab/AleartMyController/app/src/main/java/com/example/aleartmycontroller/ui/viewmodel/AddRecordViewModel.kt)
+
+---
+
+# リリースビルドクラッシュ調査・修正 追記
+
+更新日: 2026-06-02
+
+## 概要
+
+GitHub でビルドした APK をインストールすると起動直後にクラッシュする問題を調査・修正した。
+原因は1つではなく、**2段階のクラッシュ**が存在した。
+
+---
+
+## 第1のクラッシュ：Supabase 認証情報の欠落
+
+### 原因
+
+`local.properties` は `.gitignore` 登録済みのため GitHub 側のビルド環境に存在しない。
+`app/build.gradle.kts` は `local.properties` が無くても例外を出さず、デフォルト値として**空文字**を `BuildConfig` に埋め込む。
+
+起動時に Hilt が `SupabaseModule` を初期化し、`createSupabaseClient("", "")` が呼ばれる。
+supabase-kt 3.1.4 は url/key が空の場合 `IllegalArgumentException` を投げるため、起動直後にクラッシュする。
+
+`isMinifyEnabled = false` のため ProGuard/R8 によるクラス削除は原因ではない。
+
+### 修正内容（`app/build.gradle.kts`）
+
+1. **env フォールバック** — `resolveProp()` を追加し `local.properties → 環境変数` の順で解決。CI では GitHub Secrets を環境変数として渡す。
+2. **fail-fast** — release ビルドで URL/Key が空なら `GradleException` を投げてビルドを停止。気づかずに空の APK が配布されるのを構造的に防ぐ。
+3. **`logback-android` を全 variant に** — `debugImplementation` → `implementation`。Supabase/Ktor が使う SLF4J バックエンドを release にも含める。
+4. **release signingConfig** — `RELEASE_KEYSTORE_PATH` が設定されている場合のみ release 署名を有効化。未設定時は debug 署名で代用（ローカル動作確認用）。
+
+### CI の設定が必要なもの（GitHub Secrets）
+
+| Secret 名 | 必須 | 用途 |
+|-----------|------|------|
+| `SUPABASE_URL` | ○ | Supabase プロジェクト URL |
+| `SUPABASE_ANON_KEY` | ○ | Supabase anon key |
+| `SUPABASE_GOOGLE_WEB_CLIENT_ID` | Google ログインを使う場合 | Google OAuth クライアント ID |
+| `RELEASE_KEYSTORE_BASE64` | 署名済み配布時 | keystore を base64 エンコードしたもの |
+| `RELEASE_KEYSTORE_PASSWORD` | 同上 | |
+| `RELEASE_KEY_ALIAS` | 同上 | |
+| `RELEASE_KEY_PASSWORD` | 同上 | |
+
+### 追加した CI ワークフロー（`.github/workflows/android-build.yml`）
+
+- push / PR / 手動実行でビルドが走る
+- debug APK を artifact として出力（debug 署名付き、そのまま `adb install` できる）
+- keystore Secrets が設定されていれば署名済み release APK も出力
+
+---
+
+## 第2のクラッシュ：EncryptedSharedPreferences の復号失敗
+
+### 原因
+
+クラッシュログ:
+```
+javax.crypto.AEADBadTagException
+  at androidx.security.crypto.EncryptedSharedPreferences.create
+  at TogglTokenStore.sharedPreferences_delegate$lambda$0 (TogglTokenStore.kt:19)
+```
+
+`TogglTokenStore` が `EncryptedSharedPreferences` で Toggl API トークンを暗号化保存している。
+Android Keystore のキーはアプリの署名に紐づくため、**署名の異なる APK に入れ替えると既存の暗号化ファイルが復号できなくなる**。
+（例: ローカルの debug 署名 APK → GitHub ビルドの debug 署名 APK への差し替え）
+
+### 修正内容（`TogglTokenStore.kt`）
+
+`openOrRecreate()` を追加。復号時に例外が発生した場合は `context.deleteSharedPreferences()` で暗号化ファイルを削除し、空の状態で作り直す。Toggl トークンは失われるが、クラッシュせず再入力できる状態になる。
+
+```kotlin
+private fun openOrRecreate(): SharedPreferences {
+    return try {
+        EncryptedSharedPreferences.create(...)
+    } catch (_: Exception) {
+        // AEADBadTagException 等。APK の再インストールや署名変更で発生する。
+        context.deleteSharedPreferences(PREFS_NAME)
+        EncryptedSharedPreferences.create(...)
+    }
+}
+```
+
+### 端末に既に古い APK が入っている場合の対処
+
+設定 → アプリ → AleartMyController → ストレージ → **「データを消去」** してから起動する。
+コード修正後の APK であれば自動で回復するため手動消去は不要。
+
+---
+
+## 変更ファイル一覧（本セクション）
+
+| ファイル | 変更種別 | 内容 |
+|---------|---------|------|
+| `app/build.gradle.kts` | 更新 | env フォールバック / fail-fast / logback 全 variant 化 / release 署名設定 |
+| `data/preferences/TogglTokenStore.kt` | 更新 | `AEADBadTagException` 発生時に prefs を削除して再作成 |
+| `.github/workflows/android-build.yml` | 新規 | debug / release APK のビルドと artifact 出力 |
+
+## 主要ファイル（本セクション）
+
+- [app/build.gradle.kts](/Users/yuuto/learn_lab/AleartMyController/app/build.gradle.kts)
+- [app/src/main/java/com/example/aleartmycontroller/data/preferences/TogglTokenStore.kt](/Users/yuuto/learn_lab/AleartMyController/app/src/main/java/com/example/aleartmycontroller/data/preferences/TogglTokenStore.kt)
+- [.github/workflows/android-build.yml](/Users/yuuto/learn_lab/AleartMyController/.github/workflows/android-build.yml)
