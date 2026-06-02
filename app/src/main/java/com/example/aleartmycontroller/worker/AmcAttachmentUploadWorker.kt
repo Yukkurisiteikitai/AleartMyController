@@ -8,8 +8,10 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.aleartmycontroller.data.amc.AmcAttachmentType
 import com.example.aleartmycontroller.data.local.dao.AmcAttachmentQueueDao
+import com.example.aleartmycontroller.data.preferences.AppPreferences
 import com.example.aleartmycontroller.data.repository.AmcDraftRepository
 import com.example.aleartmycontroller.data.repository.AuthRepository
+import kotlinx.coroutines.flow.first
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import io.github.jan.supabase.SupabaseClient
@@ -23,10 +25,15 @@ class AmcAttachmentUploadWorker @AssistedInject constructor(
     private val supabase: SupabaseClient,
     private val authRepository: AuthRepository,
     private val amcDraftRepository: AmcDraftRepository,
-    private val attachmentQueueDao: AmcAttachmentQueueDao
+    private val attachmentQueueDao: AmcAttachmentQueueDao,
+    private val appPreferences: AppPreferences
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
+        if (!appPreferences.cloudSyncEnabled.first()) {
+            Log.i(TAG, "Cloud sync disabled, skipping upload")
+            return Result.success()
+        }
         if (!authRepository.isSupabaseAuthenticated()) {
             Log.w(TAG, "Supabase session not found, retrying later")
             return Result.retry()

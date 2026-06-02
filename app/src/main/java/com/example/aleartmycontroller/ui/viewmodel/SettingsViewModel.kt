@@ -53,6 +53,13 @@ class SettingsViewModel @Inject constructor(
     val customIntervalMinutes: StateFlow<Int> = prefs.customIntervalMinutes
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 30)
 
+    val cloudSyncEnabled: StateFlow<Boolean> = prefs.cloudSyncEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    fun setCloudSyncEnabled(enabled: Boolean) {
+        viewModelScope.launch { prefs.setCloudSyncEnabled(enabled) }
+    }
+
     val amcQueueSummary: StateFlow<String> = combine(
         amcDraftRepository.observePendingDraftCount(),
         amcDraftRepository.observePendingAttachments().map { it.size },

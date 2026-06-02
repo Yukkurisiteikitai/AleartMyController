@@ -27,6 +27,9 @@ interface AmcAttachmentQueueDao {
     @Query("SELECT * FROM amc_attachment_queue WHERE status IN ('PENDING', 'NEEDS_RETRY') ORDER BY updatedAtMillis ASC")
     suspend fun getPendingOnce(): List<AmcAttachmentQueueEntity>
 
+    @Query("SELECT * FROM amc_attachment_queue WHERE draftRecordId = :draftRecordId AND status = 'READY' AND storagePath IS NOT NULL")
+    suspend fun getReadyByDraftId(draftRecordId: Long): List<AmcAttachmentQueueEntity>
+
     @Query(
         """
         UPDATE amc_attachment_queue

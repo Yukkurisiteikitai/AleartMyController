@@ -11,6 +11,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import com.example.aleartmycontroller.data.amc.AmcAttachmentStatus
 import com.example.aleartmycontroller.worker.AmcAttachmentUploadWorker
+import com.example.aleartmycontroller.worker.AmcRecordSyncWorker
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.concurrent.TimeUnit
 import com.example.aleartmycontroller.data.amc.AmcAttachmentType
@@ -142,6 +143,7 @@ class AmcDraftRepository @Inject constructor(
             updatedAtMillis = now,
             syncState = AmcSyncState.QUEUED.name
         )
+        enqueueSyncWorker()
         nextRevision
     }
 
@@ -226,6 +228,26 @@ class AmcDraftRepository @Inject constructor(
                 .setConstraints(Constraints(requiredNetworkType = NetworkType.CONNECTED))
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .build()
+        )
+    }
+
+    private fun enqueueSyncWorker() {
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            "amc_record_sync",
+            ExistingWorkPolicy.KEEP,
+            OneTimeWorkRequestBuilder<AmcRecordSyncWorker>()
+                .setConstraints(Constraints(requiredNetworkType = NetworkType.CONNECTED))
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+                .build()
+        )
+    }
+
+    suspend fun markRecordSynced(draftRecordId: Long, remoteRecordId: String) {
+        draftDao.markSynced(
+            draftRecordId = draftRecordId,
+            remoteRecordId = remoteRecordId,
+            updatedAtMillis = System.currentTimeMillis(),
+            syncState = AmcSyncState.SYNCED.name
         )
     }
 

@@ -35,6 +35,7 @@ fun SettingsScreen(
     val customInterval by viewModel.customIntervalMinutes.collectAsStateWithLifecycle()
     val userEmail by viewModel.userEmail.collectAsStateWithLifecycle()
     val amcQueueSummary by viewModel.amcQueueSummary.collectAsStateWithLifecycle()
+    val cloudSyncEnabled by viewModel.cloudSyncEnabled.collectAsStateWithLifecycle()
     var showCustomDialog by remember { mutableStateOf(false) }
 
     // Google Sign-In Launcher
@@ -153,6 +154,20 @@ fun SettingsScreen(
                 ListItem(
                     headlineContent = { Text("ローカルキュー") },
                     supportingContent = { Text(amcQueueSummary) }
+                )
+            }
+            item {
+                ListItem(
+                    headlineContent = { Text("クラウドに同期する") },
+                    supportingContent = {
+                        Text(if (cloudSyncEnabled) "テキスト・写真を Supabase に送信します" else "ローカルのみ保管します")
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = cloudSyncEnabled,
+                            onCheckedChange = viewModel::setCloudSyncEnabled
+                        )
+                    }
                 )
             }
 

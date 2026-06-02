@@ -103,6 +103,10 @@ class AddRecordViewModel @Inject constructor(
             runCatching {
                 recordRepository.addMemoRecord(event, text, isVoice)
                 logToToggl(if (isVoice) "VoiceMemo" else "TextMemo")
+
+                val userId = authRepository.currentSupabaseUserId()
+                val draftId = amcDraftRepository.getOrCreateDraftForEvent(eventId, userId)
+                amcDraftRepository.appendRevision(draftId, text, userId)
             }
                 .onSuccess {
                     if (!isVoice && !event.isLocalDraft()) {

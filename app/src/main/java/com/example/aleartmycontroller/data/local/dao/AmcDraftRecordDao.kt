@@ -34,6 +34,9 @@ interface AmcDraftRecordDao {
     @Query("SELECT * FROM amc_draft_records WHERE syncState != 'SYNCED' ORDER BY updatedAtMillis DESC")
     fun observePending(): Flow<List<AmcDraftRecordEntity>>
 
+    @Query("SELECT * FROM amc_draft_records WHERE syncState = 'QUEUED' AND deletedAtMillis IS NULL")
+    suspend fun getPendingSyncOnce(): List<AmcDraftRecordEntity>
+
     @Query("SELECT COUNT(*) FROM amc_draft_records WHERE syncState != 'SYNCED'")
     fun observePendingCount(): Flow<Int>
 

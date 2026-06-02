@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -43,6 +44,9 @@ class AppPreferences @Inject constructor(
 
         /** 初回セットアップ完了フラグ */
         val KEY_FIRST_RUN_SETUP_COMPLETE = intPreferencesKey("first_run_setup_complete")
+
+        /** AMC クラウド同期の有効フラグ（デフォルト: 有効） */
+        val KEY_AMC_CLOUD_SYNC_ENABLED = booleanPreferencesKey("amc_cloud_sync_enabled")
 
         val DEFAULT_PRESET_ORDER = "1,3,5,10,25,30,60,0"
         const val DEFAULT_INTERVAL_MINUTES = 60
@@ -87,5 +91,13 @@ class AppPreferences @Inject constructor(
 
     suspend fun setFirstRunSetupComplete(completed: Boolean) {
         context.dataStore.edit { it[KEY_FIRST_RUN_SETUP_COMPLETE] = if (completed) 1 else 0 }
+    }
+
+    val cloudSyncEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_AMC_CLOUD_SYNC_ENABLED] ?: true
+    }
+
+    suspend fun setCloudSyncEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_AMC_CLOUD_SYNC_ENABLED] = enabled }
     }
 }
