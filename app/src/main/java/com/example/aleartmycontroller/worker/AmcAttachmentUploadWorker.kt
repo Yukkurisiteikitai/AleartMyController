@@ -55,7 +55,6 @@ class AmcAttachmentUploadWorker @AssistedInject constructor(
                     supabase.storage.from("amc-media").upload(storagePath, file.readBytes())
                 }.onSuccess {
                     amcDraftRepository.markAttachmentReady(attachment.attachmentId, storagePath)
-                    file.delete()
                     Log.i(TAG, "Uploaded: $storagePath")
                 }.onFailure { e ->
                     hasFailure = true

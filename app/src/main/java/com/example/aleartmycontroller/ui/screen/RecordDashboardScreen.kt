@@ -1,5 +1,6 @@
 package com.example.aleartmycontroller.ui.screen
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -27,6 +28,9 @@ import com.example.aleartmycontroller.data.local.entity.EventEntity
 import com.example.aleartmycontroller.ui.util.toLocalTime
 import com.example.aleartmycontroller.ui.viewmodel.RecordDashboardUiEvent
 import com.example.aleartmycontroller.ui.viewmodel.RecordDashboardViewModel
+import kotlinx.coroutines.delay
+
+private enum class PressMode { SINGLE, LONG, DOUBLE }
 
 /**
  * 記録メニュー (証拠記録ワークスペース): 
@@ -44,6 +48,25 @@ fun RecordDashboardScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val hapticFeedback = LocalHapticFeedback.current
+    var pendingMode by remember { mutableStateOf<PressMode?>(null) }
+
+    LaunchedEffect(pendingMode) {
+        val mode = pendingMode ?: return@LaunchedEffect
+        delay(800L)
+        when {
+            mode == PressMode.SINGLE && uiState.isTimerRunning ->
+                uiState.currentEvent?.eventId?.let { onAddRecord(it) }
+            mode == PressMode.SINGLE ->
+                viewModel.startTimer()
+            mode == PressMode.LONG && uiState.isTimerRunning -> {
+                hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                viewModel.requestStop()
+            }
+            mode == PressMode.DOUBLE && uiState.isTimerRunning ->
+                viewModel.requestStop()
+        }
+        pendingMode = null
+    }
 
     LaunchedEffect(initialEventId, initialDraftTitle) {
         initialEventId?.let { id ->
@@ -78,28 +101,9 @@ fun RecordDashboardScreen(
         },
         bottomBar = {
             if (uiState.currentEvent != null) {
-                RecordingControlBar(
+                RecordingNoteBar(
                     noteValue = uiState.currentObservationNote,
-                    onNoteChange = viewModel::updateNote,
-                    isRunning = uiState.isTimerRunning,
-                    onShortPress = {
-                        if (uiState.isTimerRunning) {
-                            uiState.currentEvent?.eventId?.let { onAddRecord(it) }
-                        } else {
-                            viewModel.startTimer()
-                        }
-                    },
-                    onLongPress = {
-                        if (uiState.isTimerRunning) {
-                            hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                            viewModel.requestStop()
-                        }
-                    },
-                    onDoublePress = {
-                        if (uiState.isTimerRunning) {
-                            viewModel.requestStop()
-                        }
-                    }
+                    onNoteChange = viewModel::updateNote
                 )
             }
         }
@@ -120,11 +124,14 @@ fun RecordDashboardScreen(
                     eventTitle = currentEvent.title
                 )
 
-                // ---- 証拠記録アクション (タイマー動作中のみ) ----
-                if (uiState.isTimerRunning) {
-                    EvidenceActionSection(
-                        onPhotoAction = { onAddRecord(currentEvent.eventId) },
-                        onNoteAction = { onAddRecord(currentEvent.eventId) }
+                // ---- メインアクションボタン ----
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    RecordActionButton(
+                        isRunning = uiState.isTimerRunning,
+                        pendingMode = pendingMode,
+                        onSinglePress = { if (pendingMode == null) pendingMode = PressMode.SINGLE },
+                        onLongPress = { if (pendingMode == null) pendingMode = PressMode.LONG },
+                        onDoublePress = { pendingMode = PressMode.DOUBLE }
                     )
                 }
 
@@ -185,62 +192,88 @@ private fun TimerDisplay(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun RecordingControlBar(
-    noteValue: String,
-    onNoteChange: (String) -> Unit,
+private fun RecordingNoteBar(noteValue: String, onNoteChange: (String) -> Unit) {
+    Surface(tonalElevation = 8.dp, shadowElevation = 16.dp, modifier = Modifier.fillMaxWidth()) {
+        OutlinedTextField(
+            value = noteValue,
+            onValueChange = onNoteChange,
+            placeholder = { Text("メモを入力…") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .navigationBarsPadding(),
+            shape = CircleShape,
+            colors = OutlinedTextFieldDefaults.colors(
+                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+            ),
+            singleLine = true
+        )
+    }
+}
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun RecordActionButton(
     isRunning: Boolean,
-    onShortPress: () -> Unit,
+    pendingMode: PressMode?,
+    onSinglePress: () -> Unit,
     onLongPress: () -> Unit,
     onDoublePress: () -> Unit
 ) {
-    Surface(
-        tonalElevation = 8.dp,
-        shadowElevation = 16.dp,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
+    val primary   = MaterialTheme.colorScheme.primary
+    val secondary = MaterialTheme.colorScheme.secondary
+    val tertiary  = MaterialTheme.colorScheme.tertiary
+    val error     = MaterialTheme.colorScheme.error
+
+    val targetColor = when {
+        pendingMode == PressMode.SINGLE && isRunning -> secondary  // 証拠追加
+        pendingMode == PressMode.SINGLE              -> primary    // 開始確認
+        pendingMode == PressMode.LONG                -> tertiary   // 停止（慎重）
+        pendingMode == PressMode.DOUBLE              -> error      // 即時停止
+        isRunning                                    -> error      // 実行中デフォルト
+        else                                         -> primary    // 待機中
+    }
+    val buttonColor by animateColorAsState(
+        targetValue = targetColor,
+        animationSpec = tween(durationMillis = 200),
+        label = "recordActionColor"
+    )
+
+    val icon: ImageVector = when {
+        pendingMode == PressMode.SINGLE && isRunning -> Icons.Default.AddAPhoto
+        pendingMode == PressMode.LONG                -> Icons.Default.StopCircle
+        pendingMode == PressMode.DOUBLE              -> Icons.Default.Stop
+        isRunning                                    -> Icons.Default.Stop
+        else                                         -> Icons.Default.PlayArrow
+    }
+
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Box(
             modifier = Modifier
-                .padding(16.dp)
-                .navigationBarsPadding(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            OutlinedTextField(
-                value = noteValue,
-                onValueChange = onNoteChange,
-                placeholder = { Text("何をしていますか？") },
-                modifier = Modifier.weight(1f),
-                shape = CircleShape,
-                colors = OutlinedTextFieldDefaults.colors(
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                .size(72.dp)
+                .clip(CircleShape)
+                .background(buttonColor)
+                .combinedClickable(
+                    onClick = onSinglePress,
+                    onLongClick = onLongPress,
+                    onDoubleClick = onDoublePress
                 ),
-                singleLine = true
-            )
-            
-            Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(CircleShape)
-                    .background(if (isRunning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
-                    .combinedClickable(
-                        onClick = onShortPress,
-                        onLongClick = onLongPress,
-                        onDoubleClick = onDoublePress
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = if (isRunning) Icons.Default.Stop else Icons.Default.PlayArrow,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(32.dp)
-                )
-            }
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(imageVector = icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(40.dp))
         }
+        val label = when {
+            pendingMode == PressMode.SINGLE && isRunning -> "証拠を追加…"
+            pendingMode == PressMode.LONG                -> "停止します…"
+            pendingMode == PressMode.DOUBLE              -> "停止します…"
+            isRunning                                    -> "単押: 追加  長押: 停止  2回: 即停止"
+            else                                         -> "単押で開始"
+        }
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
     }
 }
 

@@ -62,7 +62,7 @@ object CameraUtils {
             BitmapFactory.decodeStream(it, null, opts)
         } ?: error("Failed to decode image: $sourceUri")
 
-        val uploadDir = File(context.cacheDir, "amc_upload").also { it.mkdirs() }
+        val uploadDir = File(context.filesDir, "photos").also { it.mkdirs() }
         val outFile = File(uploadDir, "img_${System.currentTimeMillis()}.jpg")
         outFile.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, quality, it) }
         bitmap.recycle()

@@ -216,7 +216,7 @@ Room schema JSON:
 - `./gradlew test` と `./gradlew compileDebugAndroidTestKotlin` は成功
 - 2 コマンドを並列実行すると KSP 出力競合で落ちることがあるので、検証は順次実行に寄せた方が安全
 
-## 未着手 / 次にやること
+## 未着手 / 次にやること（2026-05-28 時点）
 
 ### 優先度高
 
@@ -261,3 +261,135 @@ Room schema JSON:
 - [app/src/main/java/com/example/aleartmycontroller/data/amc/AmcAttachmentQueueLogger.kt](/Users/yuuto/learn_lab/AleartMyController/app/src/main/java/com/example/aleartmycontroller/data/amc/AmcAttachmentQueueLogger.kt)
 - [app/src/main/java/com/example/aleartmycontroller/ui/viewmodel/SettingsViewModel.kt](/Users/yuuto/learn_lab/AleartMyController/app/src/main/java/com/example/aleartmycontroller/ui/viewmodel/SettingsViewModel.kt)
 - [app/src/main/java/com/example/aleartmycontroller/ui/screen/SettingsScreen.kt](/Users/yuuto/learn_lab/AleartMyController/app/src/main/java/com/example/aleartmycontroller/ui/screen/SettingsScreen.kt)
+
+---
+
+# Supabase 認証・ストレージ移行 追記
+
+更新日: 2026-06-02  
+ブランチ: `feature/Yukkurisiteikitai/token_safe_save`
+
+## 概要
+
+Supabase Auth（Google OAuth）と Supabase Storage（`amc-media` バケット）を Android クライアントに接続し、写真証拠を Supabase Storage へ自動アップロードする仕組みを構築した。
+
+R2 presigned PUT 方式は採用せず、`supabase-kt` ライブラリの `storage.from().upload()` で直接アップロードする構成を選択した。
+
+## 追加・変更したファイル一覧
+
+### Android
+
+| ファイル | 変更種別 | 内容 |
+|---------|---------|------|
+| `di/SupabaseModule.kt` | 新規 | Supabase クライアント DI。Auth / Postgrest / Storage をインストール |
+| `data/repository/AuthRepository.kt` | 更新 | Google IdToken で Supabase にサインイン。`isSupabaseAuthenticated()` / `currentSupabaseUserId()` を追加 |
+| `worker/AmcAttachmentUploadWorker.kt` | 新規 | WorkManager Worker。キュー内の PENDING 添付を Supabase Storage にアップロードし状態を更新 |
+| `ui/util/CameraUtils.kt` | 更新 | `compressToJpeg()` を追加。`content://` / `file://` URI を 2048px 上限・JPEG 85% に圧縮して `filesDir/photos/` に保存 |
+| `ui/viewmodel/AddRecordViewModel.kt` | 更新 | `addPhoto()` に `compressToJpeg()` → `queueAttachment()` → WorkManager 起動の流れを追加 |
+| `ui/viewmodel/SetupViewModel.kt` | 更新 | Google サインイン完了後に `authRepository.signInWithSupabase()` を呼び出す |
+| `ui/viewmodel/SettingsViewModel.kt` | 更新 | 設定画面から Supabase サインインを再試行できる導線を追加 |
+| `data/local/AppDatabase.kt` | 更新 | Room version `8`。`amc_attachment_queue` に `storagePath` カラムを追加する `MIGRATION_7_8` |
+| `app/build.gradle.kts` | 更新 | `supabase-kt` ライブラリ群を追加（`bom:3.1.4`） |
+
+### Supabase（サーバー側）
+
+| ファイル | 内容 |
+|---------|------|
+| `supabase/migrations/0001_initial_schema.sql` | `profiles` / `amc_records` / `amc_record_revisions` / `amc_media_objects` / `share_links` / `share_grants` テーブルと RLS |
+| `supabase/migrations/0002_storage_rls.sql` | `amc-media` バケット作成（private, 10 MB, JPEG/M4A のみ）と storage.objects RLS |
+
+## アーキテクチャ：写真アップロードの流れ
+
+```
+ユーザーが写真を撮影
+  ↓
+CameraUtils.compressToJpeg()  →  filesDir/photos/img_XXX.jpg
+  ↓
+AmcDraftRepository.queueAttachment()  →  amc_attachment_queue に PENDING で登録
+  ↓
+WorkManager.enqueueUniqueWork("amc_attachment_upload", KEEP, ...)
+  ↓
+AmcAttachmentUploadWorker.doWork()
+  ├─ isSupabaseAuthenticated() が false → Result.retry()
+  ├─ getPendingOnce() で PENDING / NEEDS_RETRY を取得
+  ├─ resolveLocalFile(localUri)  →  file:// URI から File を解決
+  └─ supabase.storage.from("amc-media").upload(storagePath, bytes)
+       storagePath = {userId}/{draftRecordId}/{attachmentId}.jpg
+       成功 → markAttachmentReady(storagePath)
+       失敗 → markAttachmentNeedsRetry() or markAttachmentFailed()
+```
+
+## Supabase Storage のパス設計
+
+```
+amc-media/{owner_user_id}/{draft_record_id}/{attachment_id}.jpg
+amc-media/{owner_user_id}/{draft_record_id}/{attachment_id}.m4a
+```
+
+- `storage_upload_own` ポリシー: `foldername(name)[1] == auth.uid()` のみ INSERT 可
+- `storage_select_own` ポリシー: 自分のファイルのみ SELECT 可（現在は自分専用）
+
+## Room マイグレーション v7 → v8
+
+```sql
+ALTER TABLE amc_attachment_queue ADD COLUMN storagePath TEXT;
+```
+
+テスト: `app/src/androidTest/java/com/example/aleartmycontroller/migration/Migration7To8Test.kt`
+
+## `autoLoadFromStorage` に関するバグと修正（2026-06-02）
+
+**現象**: 写真追加後、Logcat に `AMC.UploadWorker` のログが一切出ず Supabase へのアップロードが行われない。
+
+**原因**: 前回のセッション（commit `4f0d5f9`）で `SupabaseModule` に `autoLoadFromStorage = false` と `GlobalScope.launch { client.auth.loadFromStorage() }` を設定した。Worker が DI 初期化直後に起動するとまだ `loadFromStorage()` が完了していないため、`isSupabaseAuthenticated()` が false を返し `Result.retry()` になる。Worker のログが出ないのはこのため。
+
+**修正内容**: `autoLoadFromStorage = false` と `GlobalScope.launch` を削除し、`install(Auth)` をデフォルト設定（`autoLoadFromStorage = true`）に戻した。
+
+```kotlin
+// 修正後（SupabaseModule.kt）
+install(Auth)   // autoLoadFromStorage = true がデフォルト。IOスレッドで非同期ロードされる
+```
+
+`autoLoadFromStorage = true` はメインスレッドをブロックしない。supabase-kt が内部の CoroutineScope で `loadFromStorage()` を処理する。
+
+**`localUri` の URI 形式について**（問題なし）:
+`CameraUtils.compressToJpeg()` は `filesDir/photos/img_XXX.jpg` に保存し、`Uri.fromFile(file).toString()` で `file:///data/user/0/.../files/photos/img_XXX.jpg` を返す。Worker の `resolveLocalFile()` は `uri.path` でこの絶対パスを取得するため、正しく解決される。
+
+## 現在の未解決・次のタスク（2026-06-02 時点）
+
+### 動作確認待ち
+
+- `autoLoadFromStorage` 修正後に写真追加 → `AMC.UploadWorker: Uploaded: ...` ログが出ることを確認する
+
+### 優先度高
+
+- Supabase `amc_records` への同期
+  - Worker がアップロード完了した後、local draft の `ownerUserId` が null の場合の補完ロジック
+  - `AmcDraftRepository` → Supabase `amc_records` への upsert 実装
+- アップロード後のローカルファイル削除
+  - `markAttachmentReady()` 後に `filesDir/photos/` の圧縮済み JPEG を削除する
+- Supabase サインインのリトライ UX
+  - セッション期限切れ時（`isSupabaseAuthenticated() = false` が長期間続く場合）の通知や再サインイン導線
+
+### 優先度中
+
+- `amc_attachment_queue` の `storagePath` を使って、既にアップロード済みの画像を表示する
+- Storage RLS に「共有相手は SELECT 可」ポリシーを追加する（`share_grants` テーブルを参照）
+- アップロード状態を UI に表示（PENDING / UPLOADING / READY / FAILED バッジ）
+
+### 優先度低（前セクションから引き継ぎ）
+
+- 共有・認可 UI
+- Google Calendar ミラー更新フロー
+- サムネイル
+- 手動マージ UI
+
+## 主要ファイル（Supabase 移行分）
+
+- [app/src/main/java/com/example/aleartmycontroller/di/SupabaseModule.kt](/Users/yuuto/learn_lab/AleartMyController/app/src/main/java/com/example/aleartmycontroller/di/SupabaseModule.kt)
+- [app/src/main/java/com/example/aleartmycontroller/data/repository/AuthRepository.kt](/Users/yuuto/learn_lab/AleartMyController/app/src/main/java/com/example/aleartmycontroller/data/repository/AuthRepository.kt)
+- [app/src/main/java/com/example/aleartmycontroller/worker/AmcAttachmentUploadWorker.kt](/Users/yuuto/learn_lab/AleartMyController/app/src/main/java/com/example/aleartmycontroller/worker/AmcAttachmentUploadWorker.kt)
+- [app/src/main/java/com/example/aleartmycontroller/ui/util/CameraUtils.kt](/Users/yuuto/learn_lab/AleartMyController/app/src/main/java/com/example/aleartmycontroller/ui/util/CameraUtils.kt)
+- [app/src/main/java/com/example/aleartmycontroller/ui/viewmodel/AddRecordViewModel.kt](/Users/yuuto/learn_lab/AleartMyController/app/src/main/java/com/example/aleartmycontroller/ui/viewmodel/AddRecordViewModel.kt)
+- [supabase/migrations/0001_initial_schema.sql](/Users/yuuto/learn_lab/AleartMyController/supabase/migrations/0001_initial_schema.sql)
+- [supabase/migrations/0002_storage_rls.sql](/Users/yuuto/learn_lab/AleartMyController/supabase/migrations/0002_storage_rls.sql)
