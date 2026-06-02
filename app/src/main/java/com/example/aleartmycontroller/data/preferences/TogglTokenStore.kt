@@ -1,7 +1,7 @@
 package com.example.aleartmycontroller.data.preferences
 
 import android.content.Context
-import androidx.core.content.edit
+import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -12,17 +12,32 @@ import javax.inject.Singleton
 class TogglTokenStore @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    private val sharedPreferences by lazy {
+    private val sharedPreferences by lazy { openOrRecreate() }
+
+    private fun openOrRecreate(): SharedPreferences {
         val masterKey = MasterKey.Builder(context)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
             .build()
-        EncryptedSharedPreferences.create(
-            context,
-            PREFS_NAME,
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        )
+        return try {
+            EncryptedSharedPreferences.create(
+                context,
+                PREFS_NAME,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (_: Exception) {
+            // APK の再インストールや署名変更で Keystore キーと暗号化データが合わなくなった場合に
+            // AEADBadTagException 等が発生する。ファイルを削除して空の状態で作り直す。
+            context.deleteSharedPreferences(PREFS_NAME)
+            EncryptedSharedPreferences.create(
+                context,
+                PREFS_NAME,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        }
     }
 
     fun hasToken(): Boolean = !getToken().isNullOrBlank()

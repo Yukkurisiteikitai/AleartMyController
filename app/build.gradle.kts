@@ -12,6 +12,21 @@ val localProps = Properties().apply {
     rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
 
+/**
+ * ビルド設定値の解決順:
+ *   1. local.properties（ローカル開発）
+ *   2. 環境変数（CI / GitHub Actions の Secrets）
+ * どちらにも無ければ空文字。release ビルドでの必須値の空チェックは下で行う。
+ */
+fun resolveProp(key: String): String =
+    localProps.getProperty(key)?.takeIf { it.isNotBlank() }
+        ?: System.getenv(key)?.takeIf { it.isNotBlank() }
+        ?: ""
+
+val supabaseUrl = resolveProp("SUPABASE_URL")
+val supabaseAnonKey = resolveProp("SUPABASE_ANON_KEY")
+val supabaseGoogleWebClientId = resolveProp("SUPABASE_GOOGLE_WEB_CLIENT_ID")
+
 android {
     namespace = "com.example.aleartmycontroller"
     compileSdk = 36
@@ -25,9 +40,23 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        buildConfigField("String", "SUPABASE_URL", "\"${localProps.getProperty("SUPABASE_URL", "")}\"")
-        buildConfigField("String", "SUPABASE_ANON_KEY", "\"${localProps.getProperty("SUPABASE_ANON_KEY", "")}\"")
-        buildConfigField("String", "SUPABASE_GOOGLE_WEB_CLIENT_ID", "\"${localProps.getProperty("SUPABASE_GOOGLE_WEB_CLIENT_ID", "")}\"")
+        buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
+        buildConfigField("String", "SUPABASE_GOOGLE_WEB_CLIENT_ID", "\"$supabaseGoogleWebClientId\"")
+    }
+
+    val keystoreFile = resolveProp("RELEASE_KEYSTORE_PATH")
+    signingConfigs {
+        // keystore 情報（local.properties か CI Secrets）が揃っている場合のみ release 署名を構成する。
+        // 揃っていなければ署名なし（=インストール不可な APK）になるため、配布時は必ず設定すること。
+        if (keystoreFile.isNotBlank()) {
+            create("release") {
+                storeFile = file(keystoreFile)
+                storePassword = resolveProp("RELEASE_KEYSTORE_PASSWORD")
+                keyAlias = resolveProp("RELEASE_KEY_ALIAS")
+                keyPassword = resolveProp("RELEASE_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
@@ -37,6 +66,22 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+
+            // keystore Secrets があれば release 署名、なければ debug 署名で代用（ローカル動作確認用）。
+            signingConfig = if (keystoreFile.isNotBlank()) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
+
+            // fail-fast: 認証情報が無いまま空の release APK を配布してしまう事故を防ぐ。
+            // （local.properties も環境変数も無い CI ビルドで起動直後にクラッシュするのを構造的に防止）
+            if (supabaseUrl.isBlank() || supabaseAnonKey.isBlank()) {
+                throw GradleException(
+                    "SUPABASE_URL / SUPABASE_ANON_KEY が未設定です。" +
+                        "local.properties か環境変数（CI Secrets）で指定してください。"
+                )
+            }
         }
     }
     packaging {
@@ -127,5 +172,6 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
-    debugImplementation(libs.logback.android)
+    // SLF4J バックエンド（Supabase/Ktor が使用）。release ビルドにも必要なので全 variant に含める。
+    implementation(libs.logback.android)
 }
