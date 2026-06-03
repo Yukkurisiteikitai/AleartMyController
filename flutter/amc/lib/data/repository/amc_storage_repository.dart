@@ -11,9 +11,21 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class AmcStorageRepository {
   AmcStorageRepository(this._supabase);
 
-  final SupabaseClient _supabase;
+  /// Supabase 未初期化なら null。Storage 操作を呼んだ時のみエラーにする。
+  final SupabaseClient? _supabase;
 
   static const String _bucket = 'amc-media';
+
+  SupabaseClient _requireClient() {
+    final client = _supabase;
+    if (client == null) {
+      throw StateError(
+        'Supabase が初期化されていません。SUPABASE_URL / SUPABASE_ANON_KEY を '
+        '--dart-define で設定してください。',
+      );
+    }
+    return client;
+  }
 
   /// バイナリを Storage にアップロードし、保存した storagePath を返す。
   Future<String> uploadBinary({
@@ -21,7 +33,7 @@ class AmcStorageRepository {
     required Uint8List bytes,
     required String mimeType,
   }) async {
-    await _supabase.storage.from(_bucket).uploadBinary(
+    await _requireClient().storage.from(_bucket).uploadBinary(
           storagePath,
           bytes,
           fileOptions: FileOptions(contentType: mimeType, upsert: true),
@@ -31,7 +43,7 @@ class AmcStorageRepository {
 
   /// Storage から認証付きでダウンロードして bytes を返す。
   Future<Uint8List> downloadBytes(String storagePath) {
-    return _supabase.storage.from(_bucket).download(storagePath);
+    return _requireClient().storage.from(_bucket).download(storagePath);
   }
 
   /// Storage からダウンロードして端末ローカルにファイル保存し、保存先パスを返す。

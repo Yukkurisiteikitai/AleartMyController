@@ -13,11 +13,26 @@ class AuthRepository {
   AuthRepository(this._googleSignIn, this._supabase);
 
   final GoogleSignIn _googleSignIn;
-  final SupabaseClient _supabase;
 
-  bool isSupabaseAuthenticated() => _supabase.auth.currentSession != null;
+  /// Supabase 未初期化なら null（クラウド機能を呼んだ時のみエラーにする）。
+  final SupabaseClient? _supabase;
 
-  String? currentSupabaseUserId() => _supabase.auth.currentUser?.id;
+  /// クラウド操作で非null クライアントが必要な箇所のガード。
+  SupabaseClient _requireClient() {
+    final client = _supabase;
+    if (client == null) {
+      throw StateError(
+        'Supabase が初期化されていません。SUPABASE_URL / SUPABASE_ANON_KEY を '
+        '--dart-define で設定してください。',
+      );
+    }
+    return client;
+  }
+
+  bool isSupabaseAuthenticated() =>
+      _supabase?.auth.currentSession != null;
+
+  String? currentSupabaseUserId() => _supabase?.auth.currentUser?.id;
 
   Future<GoogleSignInAccount?> signInSilently() =>
       _googleSignIn.signInSilently();
@@ -25,6 +40,7 @@ class AuthRepository {
   /// Google サインイン → Supabase サインイン → profiles upsert。
   /// 失敗時は例外を投げる（呼び出し元で catch してエラー表示する）。
   Future<void> signInWithSupabase() async {
+    final supabase = _requireClient();
     final account = _googleSignIn.currentUser ??
         await _googleSignIn.signInSilently() ??
         await _googleSignIn.signIn();
@@ -38,12 +54,12 @@ class AuthRepository {
         'Google idToken is null. serverClientId / Web client ID の設定を確認してください。',
       );
     }
-    await _supabase.auth.signInWithIdToken(
+    await supabase.auth.signInWithIdToken(
       provider: OAuthProvider.google,
       idToken: idToken,
       accessToken: googleAuth.accessToken,
     );
-    await _upsertProfile(account);
+    await _upsertProfile(supabase, account);
   }
 
   /// Google Calendar 用の認証済みクライアント（googleapis に渡す）。
@@ -54,11 +70,14 @@ class AuthRepository {
     return _googleSignIn.authenticatedClient();
   }
 
-  Future<void> _upsertProfile(GoogleSignInAccount account) async {
-    final userId = _supabase.auth.currentUser?.id;
+  Future<void> _upsertProfile(
+    SupabaseClient supabase,
+    GoogleSignInAccount account,
+  ) async {
+    final userId = supabase.auth.currentUser?.id;
     if (userId == null) return;
     try {
-      await _supabase.from('profiles').upsert({
+      await supabase.from('profiles').upsert({
         'id': userId,
         'google_subject': account.id,
         if (account.displayName != null) 'display_name': account.displayName,

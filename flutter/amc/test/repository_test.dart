@@ -4,7 +4,6 @@ import 'package:amc/data/local/database.dart';
 import 'package:amc/data/local/tables.dart';
 import 'package:amc/data/repository/observation_event_repository.dart';
 import 'package:amc/data/repository/record_repository.dart';
-import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 

@@ -1,24 +1,49 @@
-// P0 スモークテスト: アプリが起動し、ホーム（イベント一覧）とボトムバーが描画されること。
-// 各機能の本格的なテストは Wave 2 以降で features/*/ ごとに追加する。
+// アプリ起動スモークテスト: ホームシェル（ボトムバー3タブ + 中央FAB）が描画されること。
+//
+// Wave 2 実装後の注意:
+// - ホームは実画面(event_list, DB依存) → appDatabaseProvider を in-memory DB に override。
+// - Supabase 未初期化でも supabaseClientProvider は null を返すのでクラッシュしない。
+// - シェルは IndexedStack で history/analytics も同時 mount し、両画面はロード中に
+//   CircularProgressIndicator を出す。pumpAndSettle はこのアニメで止まらないため使わず、
+//   pump() で1フレームだけ描画して shell の存在を検証する。
 
+import 'package:amc/app.dart';
+import 'package:amc/data/local/database.dart';
+import 'package:amc/providers/database_providers.dart';
+import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:amc/app.dart';
-
 void main() {
-  testWidgets('app boots to home shell with bottom bar', (tester) async {
-    await tester.pumpWidget(const ProviderScope(child: AmcApp()));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'app boots to home shell with bottom bar',
+    (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
 
-    // ホーム（イベント一覧）のスタブが表示される。
-    expect(find.text('EventListScreen — TODO (Wave 2: event_list)'), findsOneWidget);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [appDatabaseProvider.overrideWithValue(db)],
+          child: const AmcApp(),
+        ),
+      );
+      // 1フレーム描画 + 非同期ロードを少し進める（pumpAndSettle は spinner で止まらない）。
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
 
-    // ボトムバーの3タブ + 中央 FAB。
-    expect(find.text('ホーム'), findsOneWidget);
-    expect(find.text('履歴'), findsOneWidget);
-    expect(find.text('分析'), findsOneWidget);
-    expect(find.byType(FloatingActionButton), findsOneWidget);
-  });
+      // ボトムバーの3タブ + 中央 FAB（app_router の shell が描画されている）。
+      expect(find.text('ホーム'), findsOneWidget);
+      expect(find.text('履歴'), findsOneWidget);
+      expect(find.text('分析'), findsOneWidget);
+      expect(find.byType(FloatingActionButton), findsOneWidget);
+
+      // drift は stream 購読解除時に Timer(Duration.zero) でクリーンアップを遅延する
+      // （mount 中の各 watch 分）。ツリーを明示破棄 → pumpAndSettle で全 Timer/microtask を
+      // 排出し、「pending timer」リーク判定を回避する（アプリ側のバグではない）。
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
+    },
+    timeout: const Timeout(Duration(seconds: 30)),
+  );
 }

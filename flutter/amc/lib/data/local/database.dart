@@ -41,10 +41,24 @@ part 'database.g.dart';
   ],
 )
 class AppDatabase extends _$AppDatabase {
-  /// 本番用。executor 省略時は端末のドキュメント領域に永続化する。
+  /// 本番用。executor 省略時はプラットフォームに応じて接続する。
   /// テストでは `AppDatabase(NativeDatabase.memory())` のように executor を注入する。
   AppDatabase([QueryExecutor? executor])
-      : super(executor ?? driftDatabase(name: 'amc'));
+      : super(executor ?? _openConnection());
+
+  /// クロスプラットフォーム接続（§8）。
+  /// - native(Android/iOS/desktop): 端末のドキュメント領域に永続化（`web` 引数は無視される）。
+  /// - web: web/ 配下の sqlite3.wasm + drift_worker.js を使う（IndexedDB 永続化）。
+  ///   → これらのアセットは `web/` に配置が必要（docs/migration_plan.md §8 / README 参照）。
+  static QueryExecutor _openConnection() {
+    return driftDatabase(
+      name: 'amc',
+      web: DriftWebOptions(
+        sqlite3Wasm: Uri.parse('sqlite3.wasm'),
+        driftWorker: Uri.parse('drift_worker.js'),
+      ),
+    );
+  }
 
   @override
   int get schemaVersion => 1;

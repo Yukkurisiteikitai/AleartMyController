@@ -1,0 +1,20 @@
+{
+  "worktree": {
+    "bgIsolation": "none"
+  },
+  "permissions": {
+    "allow": [
+      "Read(/Users/yuuto/learn_lab/AleartMyController/**)",
+      "Write(/Users/yuuto/learn_lab/AleartMyController/flutter/amc/lib/**)",
+      "Write(/Users/yuuto/learn_lab/AleartMyController/flutter/amc/docs/**)",
+      "Bash(flutter analyze *)",
+      "Bash(flutter test *)",
+      "Bash(flutter pub *)",
+      "Bash(dart run build_runner *)",
+      "Bash(find *)",
+      "Bash(grep *)",
+      "Bash(ls *)",
+      "Bash(cat *)"
+    ]
+  }
+}
