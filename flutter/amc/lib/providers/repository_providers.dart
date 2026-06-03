@@ -6,6 +6,7 @@ import '../data/repository/amc_draft_repository.dart';
 import '../data/repository/amc_storage_repository.dart';
 import '../data/repository/amc_work_scheduler.dart';
 import '../data/repository/auth_repository.dart';
+import '../services/amc_work_scheduler_impl.dart';
 import '../data/repository/event_repository.dart';
 import '../data/repository/observation_event_repository.dart';
 import '../data/repository/record_repository.dart';
@@ -51,9 +52,8 @@ final eventRepositoryProvider = Provider<EventRepository>(
   ),
 );
 
-/// P4 で workmanager 実装に override する（§4.2/§4.3）。
 final amcWorkSchedulerProvider = Provider<AmcWorkScheduler>(
-  (ref) => const NoopAmcWorkScheduler(),
+  (ref) => const WorkmanagerAmcWorkScheduler(),
 );
 
 final amcDraftRepositoryProvider = Provider<AmcDraftRepository>(
