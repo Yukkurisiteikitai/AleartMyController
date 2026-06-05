@@ -1,7 +1,9 @@
 import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:googleapis/calendar/v3.dart' as gcal;
-import 'package:googleapis_auth/googleapis_auth.dart' show AuthClient;
+import 'package:googleapis_auth/googleapis_auth.dart'
+    show AccessCredentials, AccessToken, AuthClient, authenticatedClient;
+import 'package:http/http.dart' as http;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -79,9 +81,24 @@ class AuthRepository {
 
   /// Google Calendar 用の認証済みクライアント（googleapis に渡す）。
   ///
-  /// Web は signInWithOAuth（Supabase）が _googleSignIn を更新しないため、
-  /// signInSilently が null を返す場合は signIn() にフォールバックする。
+  /// Web: signInWithOAuth(Supabase) は _googleSignIn を更新しないため、
+  /// Supabase セッションの providerToken（Google OAuth アクセストークン）を直接使う。
+  /// Mobile: signInSilently → signIn() フォールバック。
   Future<AuthClient?> calendarAuthClient() async {
+    if (kIsWeb) {
+      final providerToken = _supabase?.auth.currentSession?.providerToken;
+      if (providerToken == null) return null;
+      final credentials = AccessCredentials(
+        AccessToken(
+          'Bearer',
+          providerToken,
+          DateTime.now().toUtc().add(const Duration(hours: 1)),
+        ),
+        null,
+        AuthRepository.defaultScopes,
+      );
+      return authenticatedClient(http.Client(), credentials);
+    }
     if (_googleSignIn.currentUser == null) {
       await _googleSignIn.signInSilently() ?? await _googleSignIn.signIn();
     }
