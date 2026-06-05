@@ -54,6 +54,7 @@ class AuthRepository {
       await supabase.auth.signInWithOAuth(
         OAuthProvider.google,
         redirectTo: Uri.base.origin,
+        scopes: AuthRepository.defaultScopes.join(' '),
       );
       return;
     }
