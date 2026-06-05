@@ -78,9 +78,12 @@ class AuthRepository {
   }
 
   /// Google Calendar 用の認証済みクライアント（googleapis に渡す）。
+  ///
+  /// Web は signInWithOAuth（Supabase）が _googleSignIn を更新しないため、
+  /// signInSilently が null を返す場合は signIn() にフォールバックする。
   Future<AuthClient?> calendarAuthClient() async {
     if (_googleSignIn.currentUser == null) {
-      await _googleSignIn.signInSilently();
+      await _googleSignIn.signInSilently() ?? await _googleSignIn.signIn();
     }
     return _googleSignIn.authenticatedClient();
   }
