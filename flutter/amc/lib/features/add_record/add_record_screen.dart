@@ -7,7 +7,6 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/local/daos/record_dao.dart';
 import '../../data/local/tables.dart';
-import '../../widgets/primary_action_button.dart';
 import 'add_record_notifier.dart';
 
 /// 記録追加画面（Android: AddRecordScreen / AddRecordViewModel 相当）。
@@ -195,21 +194,20 @@ class _CameraPreviewArea extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _CameraButton(
-            icon: Icons.camera_alt_outlined,
-            label: 'カメラで撮影',
-            onPressed: state.isBusy
-                ? null
-                : () => notifier.addPhotoFromCamera(),
-          ),
-          Container(
-            width: 1,
-            height: 80,
-            color: AppTheme.divider,
-          ),
+          // カメラはWebでは非対応
+          if (!kIsWeb)
+            _CameraButton(
+              icon: Icons.camera_alt_outlined,
+              label: 'カメラで撮影',
+              onPressed: state.isBusy
+                  ? null
+                  : () => notifier.addPhotoFromCamera(),
+            ),
+          if (!kIsWeb)
+            Container(width: 1, height: 80, color: AppTheme.divider),
           _CameraButton(
             icon: Icons.photo_library_outlined,
-            label: 'ギャラリーから',
+            label: kIsWeb ? '画像を選択' : 'ギャラリーから',
             onPressed: state.isBusy
                 ? null
                 : () => notifier.addPhotoFromGallery(),
@@ -512,11 +510,8 @@ class _MemoInputArea extends StatelessWidget {
                 ),
               ],
               const Spacer(),
-              // 送信ボタン
-              PrimaryActionButton(
-                label: '保存',
-                icon: Icons.send_rounded,
-                isLoading: state.isBusy,
+              // 送信ボタン（Rowの中に収まるコンパクトサイズ）
+              FilledButton.icon(
                 onPressed: (state.isBusy || state.isListening)
                     ? null
                     : () {
@@ -525,6 +520,22 @@ class _MemoInputArea extends StatelessWidget {
                         notifier.addTextMemo(text);
                         memoController.clear();
                       },
+                icon: state.isBusy
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.send_rounded, size: 18),
+                label: const Text('保存'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppTheme.primary,
+                  minimumSize: const Size(0, 44),
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                ),
               ),
             ],
           ),

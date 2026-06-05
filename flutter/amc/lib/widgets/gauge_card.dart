@@ -84,7 +84,8 @@ class _GaugePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final strokeWidth = size.width * 0.1;
-    final center = Offset(size.width / 2, size.height);
+    // Inset center by half the stroke so the bottom cap stays within bounds.
+    final center = Offset(size.width / 2, size.height - strokeWidth / 2);
     final radius = size.width / 2 - strokeWidth / 2;
 
     final bgPaint = Paint()
