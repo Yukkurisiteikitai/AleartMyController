@@ -3,17 +3,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/theme/app_theme.dart';
 import '../../data/local/daos/record_dao.dart';
 import '../../data/local/database.dart';
 import '../../data/local/tables.dart';
+import '../../widgets/donut_progress.dart';
+import '../../widgets/primary_action_button.dart';
+import '../../widgets/section_card.dart';
 import 'event_detail_notifier.dart';
 
 /// イベント詳細画面（Android: EventDetailScreen / EventDetailViewModel 相当）。
-///
-/// - Event のタイトル・日時ヘッダー。
-/// - 記録（写真・メモ）のタイムライン（添付込み）。
-/// - 記録追加ボタン（FAB → /add-record/:eventId）。
-/// - 記録削除は確認ダイアログ。
 class EventDetailScreen extends ConsumerWidget {
   const EventDetailScreen({super.key, required this.eventId});
 
@@ -43,49 +42,77 @@ class EventDetailScreen extends ConsumerWidget {
     final end = DateTime.fromMillisecondsSinceEpoch(event.endTime);
     final dateFmt = DateFormat('yyyy年M月d日(E)', 'ja');
     final timeFmt = DateFormat('HH:mm', 'ja');
+    final durationMin =
+        end.difference(start).inMinutes.clamp(0, 9999);
+
+    // Progress: records / target(5), capped at 1.0
+    final progress = (state.records.length / 5.0).clamp(0.0, 1.0);
 
     return Scaffold(
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
         title: Text(event.title, maxLines: 1, overflow: TextOverflow.ellipsis),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push('/add-record/$eventId'),
-        icon: const Icon(Icons.add_a_photo_outlined),
-        label: const Text('記録を追加'),
-      ),
       body: CustomScrollView(
         slivers: [
-          // イベント情報ヘッダー
+          // ── 進捗ヘッダー ───────────────────────────────────────────────
           SliverToBoxAdapter(
-            child: _EventHeader(
+            child: _EventProgressHeader(
               event: event,
               dateStr: dateFmt.format(start),
               timeStr: '${timeFmt.format(start)} – ${timeFmt.format(end)}',
+              durationMin: durationMin,
+              progress: progress,
+              recordCount: state.records.length,
             ),
           ),
-          // 記録一覧
-          if (state.records.isEmpty)
-            const SliverFillRemaining(
-              child: _EmptyRecords(),
-            )
-          else
-            SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final rwa = state.records[index];
-                  return _RecordTimelineItem(
-                    rwa: rwa,
-                    onDelete: () =>
-                        _confirmDeleteRecord(context, notifier, rwa.record),
-                    onTap: () =>
-                        context.push('/record/${rwa.record.recordId}'),
-                  );
-                },
-                childCount: state.records.length,
+
+          // ── 記録追加ボタン ─────────────────────────────────────────────
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppTheme.spacingMd,
+                vertical: AppTheme.spacingSm,
+              ),
+              child: PrimaryActionButton(
+                label: '記録する',
+                icon: Icons.add_a_photo_outlined,
+                onPressed: () => context.push('/add-record/$eventId'),
               ),
             ),
-          // FAB 分のパディング
-          const SliverToBoxAdapter(child: SizedBox(height: 88)),
+          ),
+
+          // ── 記録一覧 ───────────────────────────────────────────────────
+          if (state.records.isEmpty)
+            const SliverFillRemaining(child: _EmptyRecords())
+          else
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(
+                AppTheme.spacingMd,
+                AppTheme.spacingSm,
+                AppTheme.spacingMd,
+                AppTheme.spacingXl,
+              ),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final rwa = state.records[index];
+                    return Padding(
+                      padding:
+                          const EdgeInsets.only(bottom: AppTheme.spacingSm),
+                      child: _RecordTimelineItem(
+                        rwa: rwa,
+                        onDelete: () =>
+                            _confirmDeleteRecord(context, notifier, rwa.record),
+                        onTap: () =>
+                            context.push('/record/${rwa.record.recordId}'),
+                      ),
+                    );
+                  },
+                  childCount: state.records.length,
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -119,50 +146,146 @@ class EventDetailScreen extends ConsumerWidget {
   }
 }
 
-class _EventHeader extends StatelessWidget {
-  const _EventHeader({
+// ── 進捗ヘッダー ──────────────────────────────────────────────────────────────
+
+class _EventProgressHeader extends StatelessWidget {
+  const _EventProgressHeader({
     required this.event,
     required this.dateStr,
     required this.timeStr,
+    required this.durationMin,
+    required this.progress,
+    required this.recordCount,
   });
 
   final Event event;
   final String dateStr;
   final String timeStr;
+  final int durationMin;
+  final double progress;
+  final int recordCount;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            event.title,
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              const Icon(Icons.calendar_today_outlined, size: 16),
-              const SizedBox(width: 4),
-              Text(dateStr, style: Theme.of(context).textTheme.bodyMedium),
-            ],
-          ),
-          const SizedBox(height: 2),
-          Row(
-            children: [
-              const Icon(Icons.access_time_outlined, size: 16),
-              const SizedBox(width: 4),
-              Text(timeStr, style: Theme.of(context).textTheme.bodyMedium),
-            ],
-          ),
-        ],
+    return Padding(
+      padding: const EdgeInsets.all(AppTheme.spacingMd),
+      child: SectionCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(event.title, style: AppTheme.headlineMedium),
+            const SizedBox(height: AppTheme.spacingSm),
+            Row(
+              children: [
+                const Icon(
+                  Icons.calendar_today_outlined,
+                  size: 14,
+                  color: AppTheme.textSecondary,
+                ),
+                const SizedBox(width: 4),
+                Text(dateStr, style: AppTheme.bodySmall),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Row(
+              children: [
+                const Icon(
+                  Icons.access_time_outlined,
+                  size: 14,
+                  color: AppTheme.textSecondary,
+                ),
+                const SizedBox(width: 4),
+                Text(timeStr, style: AppTheme.bodySmall),
+              ],
+            ),
+            const SizedBox(height: AppTheme.spacingMd),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                // 進捗リング
+                DonutProgress(
+                  value: progress,
+                  size: 100,
+                  strokeWidth: 12,
+                  label: '記録進捗',
+                ),
+                // 時間情報
+                Column(
+                  children: [
+                    _InfoTile(
+                      icon: Icons.timer_outlined,
+                      label: '時間',
+                      value: '$durationMin',
+                      unit: 'min',
+                    ),
+                    const SizedBox(height: AppTheme.spacingMd),
+                    _InfoTile(
+                      icon: Icons.photo_library_outlined,
+                      label: '記録数',
+                      value: '$recordCount',
+                      unit: '件',
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 }
+
+class _InfoTile extends StatelessWidget {
+  const _InfoTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.unit,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final String unit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: AppTheme.textSecondary),
+            const SizedBox(width: 4),
+            Text(label, style: AppTheme.bodySmall),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.primary,
+              ),
+            ),
+            const SizedBox(width: 2),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(unit, style: AppTheme.bodySmall),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+// ── タイムラインアイテム ───────────────────────────────────────────────────────
 
 class _RecordTimelineItem extends StatelessWidget {
   const _RecordTimelineItem({
@@ -180,56 +303,44 @@ class _RecordTimelineItem extends StatelessWidget {
     final record = rwa.record;
     final time = DateTime.fromMillisecondsSinceEpoch(record.recordTime);
     final timeFmt = DateFormat('HH:mm', 'ja');
-
     final isPhoto = record.recordType == RecordType.photo;
-    final icon =
-        isPhoto ? Icons.photo_camera_outlined : Icons.notes_outlined;
-    final colorScheme = Theme.of(context).colorScheme;
-    final iconColor =
-        isPhoto ? colorScheme.primary : colorScheme.secondary;
-
-    // 写真のサムネイルパス（先頭の1枚）
+    final icon = isPhoto ? Icons.photo_camera_outlined : Icons.notes_outlined;
+    final iconColor = isPhoto ? AppTheme.primary : const Color(0xFF7C4DFF);
     final firstPhoto = rwa.photos.isNotEmpty ? rwa.photos.first : null;
-    // メモテキスト（先頭）
     final firstMemo = rwa.memos.isNotEmpty ? rwa.memos.first : null;
 
     return InkWell(
       onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppTheme.surface,
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          border: Border.all(color: AppTheme.divider),
+        ),
+        padding: const EdgeInsets.all(AppTheme.spacingMd),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // タイムライン縦線 + 時刻
-            Column(
-              children: [
-                Text(
-                  timeFmt.format(time),
-                  style: Theme.of(context).textTheme.labelSmall,
-                ),
-                Container(
-                  width: 1,
-                  height: 40,
-                  color: colorScheme.outlineVariant,
-                ),
-              ],
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: iconColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+              ),
+              child: Icon(icon, size: 18, color: iconColor),
             ),
-            const SizedBox(width: 12),
-            // アイコン
-            CircleAvatar(
-              radius: 16,
-              backgroundColor: iconColor.withValues(alpha: 0.12),
-              child: Icon(icon, size: 16, color: iconColor),
-            ),
-            const SizedBox(width: 12),
-            // コンテンツ
+            const SizedBox(width: AppTheme.spacingMd),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Text(timeFmt.format(time), style: AppTheme.labelMedium),
+                  const SizedBox(height: 4),
                   if (firstPhoto != null)
                     ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusSm),
                       child: Image.asset(
                         firstPhoto.filePath,
                         height: 120,
@@ -237,10 +348,14 @@ class _RecordTimelineItem extends StatelessWidget {
                         fit: BoxFit.cover,
                         errorBuilder: (_, _, _) => Container(
                           height: 120,
-                          color: colorScheme.surfaceContainerHighest,
-                          child: Icon(
+                          decoration: BoxDecoration(
+                            color: AppTheme.background,
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusSm),
+                          ),
+                          child: const Icon(
                             Icons.broken_image_outlined,
-                            color: colorScheme.onSurfaceVariant,
+                            color: AppTheme.textSecondary,
                           ),
                         ),
                       ),
@@ -250,21 +365,23 @@ class _RecordTimelineItem extends StatelessWidget {
                       firstMemo.memoText,
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyMedium,
+                      style: AppTheme.bodyMedium,
                     ),
                   if (rwa.photos.length > 1)
-                    Text(
-                      '他 ${rwa.photos.length - 1} 枚',
-                      style: Theme.of(context).textTheme.labelSmall,
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        '他 ${rwa.photos.length - 1} 枚',
+                        style: AppTheme.bodySmall,
+                      ),
                     ),
                 ],
               ),
             ),
-            // 削除ボタン
             IconButton(
               icon: const Icon(Icons.delete_outline),
               iconSize: 18,
-              color: colorScheme.onSurfaceVariant,
+              color: AppTheme.textSecondary,
               onPressed: onDelete,
             ),
           ],
@@ -283,20 +400,25 @@ class _EmptyRecords extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.photo_library_outlined,
-            size: 64,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.photo_library_outlined,
+              size: 36,
+              color: AppTheme.primary,
+            ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppTheme.spacingMd),
+          Text('記録がありません', style: AppTheme.titleMedium),
+          const SizedBox(height: AppTheme.spacingSm),
           Text(
-            '記録がありません',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '下のボタンから写真やメモを追加できます',
-            style: Theme.of(context).textTheme.bodySmall,
+            '上のボタンから写真やメモを追加できます',
+            style: AppTheme.bodySmall,
           ),
         ],
       ),

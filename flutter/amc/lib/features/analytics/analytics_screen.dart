@@ -1,13 +1,14 @@
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/theme/app_theme.dart';
 import '../../data/local/daos/analytics_dao.dart';
+import '../../widgets/gauge_card.dart';
+import '../../widgets/section_card.dart';
 import 'analytics_notifier.dart';
 
 /// 分析画面（Android: AnalyticsScreen / AnalyticsViewModel 相当）。
-///
-/// WEEK / MONTH の切り替えで集計期間を変更する。
-/// Toggl 集計は除外（migration_plan.md §0 / §6.2）。
 class AnalyticsScreen extends ConsumerWidget {
   const AnalyticsScreen({super.key});
 
@@ -17,8 +18,9 @@ class AnalyticsScreen extends ConsumerWidget {
     final notifier = ref.read(analyticsNotifierProvider.notifier);
 
     return Scaffold(
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
-        title: const Text('分析'),
+        title: const Text('振り返り・分析'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -27,130 +29,140 @@ class AnalyticsScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: _AnalyticsBody(state: state, notifier: notifier),
-    );
-  }
-}
-
-class _AnalyticsBody extends StatelessWidget {
-  const _AnalyticsBody({required this.state, required this.notifier});
-
-  final AnalyticsState state;
-  final AnalyticsNotifier notifier;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // ---- 期間セレクタ ----
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-          child: SegmentedButton<AnalyticsPeriod>(
-            segments: const [
-              ButtonSegment(
-                value: AnalyticsPeriod.week,
-                label: Text('週'),
-                icon: Icon(Icons.calendar_view_week),
-              ),
-              ButtonSegment(
-                value: AnalyticsPeriod.month,
-                label: Text('月'),
-                icon: Icon(Icons.calendar_month),
-              ),
-            ],
-            selected: {state.period},
-            onSelectionChanged: (s) => notifier.setPeriod(s.first),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // ── 期間セレクタ ──────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppTheme.spacingMd,
+              AppTheme.spacingMd,
+              AppTheme.spacingMd,
+              0,
+            ),
+            child: SegmentedButton<AnalyticsPeriod>(
+              segments: const [
+                ButtonSegment(
+                  value: AnalyticsPeriod.week,
+                  label: Text('週'),
+                  icon: Icon(Icons.calendar_view_week),
+                ),
+                ButtonSegment(
+                  value: AnalyticsPeriod.month,
+                  label: Text('月'),
+                  icon: Icon(Icons.calendar_month),
+                ),
+              ],
+              selected: {state.period},
+              onSelectionChanged: (s) => notifier.setPeriod(s.first),
+            ),
           ),
-        ),
 
-        // ---- コンテンツ ----
-        if (state.isLoading)
-          const Expanded(child: Center(child: CircularProgressIndicator()))
-        else if (state.error != null)
-          Expanded(
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+          // ── コンテンツ ────────────────────────────────────────────────
+          if (state.isLoading)
+            const Expanded(child: Center(child: CircularProgressIndicator()))
+          else if (state.error != null)
+            Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                    const SizedBox(height: 12),
+                    Text('読み込みエラー', style: AppTheme.titleMedium),
+                    const SizedBox(height: 4),
+                    Text(
+                      state.error!,
+                      style: AppTheme.bodySmall,
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.all(AppTheme.spacingMd),
                 children: [
-                  const Icon(Icons.error_outline, size: 48, color: Colors.red),
-                  const SizedBox(height: 12),
-                  Text('読み込みエラー',
-                      style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 4),
-                  Text(state.error!,
-                      style: Theme.of(context).textTheme.bodySmall,
-                      textAlign: TextAlign.center),
+                  // ゲージ + サマリー
+                  _SummaryRow(state: state),
+                  const SizedBox(height: AppTheme.spacingMd),
+                  // 週次棒グラフ
+                  _DailyBarChartCard(dailyCounts: state.dailyCounts),
+                  const SizedBox(height: AppTheme.spacingMd),
+                  // イベント別ランキング
+                  _TopEventsCard(topEvents: state.topEvents),
+                  const SizedBox(height: AppTheme.spacingLg),
                 ],
               ),
             ),
-          )
-        else
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              children: [
-                _SummaryCard(state: state),
-                const SizedBox(height: 16),
-                _DailyCountsCard(dailyCounts: state.dailyCounts),
-                const SizedBox(height: 16),
-                _TopEventsCard(topEvents: state.topEvents),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// サマリーカード
-// ---------------------------------------------------------------------------
-
-class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({required this.state});
-
-  final AnalyticsState state;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('合計', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _StatChip(
-                  icon: Icons.all_inclusive,
-                  label: '総記録',
-                  value: '${state.totalCount}',
-                ),
-                _StatChip(
-                  icon: Icons.photo_camera_outlined,
-                  label: '写真',
-                  value: '${state.photoCount}',
-                ),
-                _StatChip(
-                  icon: Icons.notes,
-                  label: 'メモ',
-                  value: '${state.memoCount}',
-                ),
-              ],
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }
 }
 
-class _StatChip extends StatelessWidget {
-  const _StatChip({
+// ── サマリー行（ゲージ + 3統計） ───────────────────────────────────────────────
+
+class _SummaryRow extends StatelessWidget {
+  const _SummaryRow({required this.state});
+
+  final AnalyticsState state;
+
+  @override
+  Widget build(BuildContext context) {
+    // 達成率: 記録のある日 / 期間日数
+    final periodDays =
+        state.period == AnalyticsPeriod.week ? 7 : 30;
+    final activeDays =
+        state.dailyCounts.where((d) => d.totalCount > 0).length;
+    final achieveRate =
+        periodDays == 0 ? 0.0 : (activeDays / periodDays).clamp(0.0, 1.0);
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ゲージカード
+        Expanded(
+          child: GaugeCard(
+            value: achieveRate,
+            title: '達成率',
+            subtitle: '$activeDays / $periodDays 日',
+          ),
+        ),
+        const SizedBox(width: AppTheme.spacingMd),
+        // 統計カード縦列
+        Expanded(
+          child: Column(
+            children: [
+              _MiniStat(
+                icon: Icons.all_inclusive,
+                label: '総記録',
+                value: '${state.totalCount}',
+              ),
+              const SizedBox(height: AppTheme.spacingSm),
+              _MiniStat(
+                icon: Icons.photo_camera_outlined,
+                label: '写真',
+                value: '${state.photoCount}',
+              ),
+              const SizedBox(height: AppTheme.spacingSm),
+              _MiniStat(
+                icon: Icons.notes,
+                label: 'メモ',
+                value: '${state.memoCount}',
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MiniStat extends StatelessWidget {
+  const _MiniStat({
     required this.icon,
     required this.label,
     required this.value,
@@ -162,95 +174,147 @@ class _StatChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Icon(icon, size: 28, color: Theme.of(context).colorScheme.primary),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: Theme.of(context)
-              .textTheme
-              .headlineSmall
-              ?.copyWith(fontWeight: FontWeight.bold),
-        ),
-        Text(label, style: Theme.of(context).textTheme.bodySmall),
-      ],
+    return SectionCard(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppTheme.spacingMd,
+        vertical: AppTheme.spacingSm,
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: AppTheme.primary),
+          const SizedBox(width: AppTheme.spacingSm),
+          Expanded(child: Text(label, style: AppTheme.bodySmall)),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: AppTheme.primary,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-// ---------------------------------------------------------------------------
-// 日別記録数カード
-// ---------------------------------------------------------------------------
+// ── 日別棒グラフカード ─────────────────────────────────────────────────────────
 
-class _DailyCountsCard extends StatelessWidget {
-  const _DailyCountsCard({required this.dailyCounts});
+class _DailyBarChartCard extends StatelessWidget {
+  const _DailyBarChartCard({required this.dailyCounts});
 
   final List<DailyRecordCount> dailyCounts;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('日別記録数', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            if (dailyCounts.isEmpty)
-              const Text('データなし')
-            else
-              ...dailyCounts.map((d) {
+    return SectionCard(
+      title: '日別記録数',
+      child: dailyCounts.isEmpty
+          ? const Padding(
+              padding: EdgeInsets.symmetric(vertical: AppTheme.spacingMd),
+              child: Center(child: Text('データなし')),
+            )
+          : SizedBox(
+              height: 160,
+              child: _BarChart(dailyCounts: dailyCounts),
+            ),
+    );
+  }
+}
+
+class _BarChart extends StatelessWidget {
+  const _BarChart({required this.dailyCounts});
+
+  final List<DailyRecordCount> dailyCounts;
+
+  @override
+  Widget build(BuildContext context) {
+    final maxCount = dailyCounts
+        .map((d) => d.totalCount)
+        .fold(0, (a, b) => a > b ? a : b);
+    final displayMax = maxCount == 0 ? 1.0 : maxCount.toDouble();
+
+    final barGroups = dailyCounts.asMap().entries.map((entry) {
+      final i = entry.key;
+      final d = entry.value;
+      return BarChartGroupData(
+        x: i,
+        barRods: [
+          BarChartRodData(
+            toY: d.totalCount.toDouble(),
+            color: AppTheme.primary,
+            width: 16,
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(4),
+            ),
+          ),
+        ],
+      );
+    }).toList();
+
+    return BarChart(
+      BarChartData(
+        maxY: displayMax * 1.2,
+        barGroups: barGroups,
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          horizontalInterval: displayMax / 4,
+          getDrawingHorizontalLine: (_) => FlLine(
+            color: AppTheme.divider,
+            strokeWidth: 1,
+          ),
+        ),
+        borderData: FlBorderData(show: false),
+        titlesData: FlTitlesData(
+          leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (value, meta) {
+                final index = value.toInt();
+                if (index < 0 || index >= dailyCounts.length) {
+                  return const SizedBox.shrink();
+                }
+                final dayKey = dailyCounts[index].dayKey;
                 final date = DateTime.fromMillisecondsSinceEpoch(
-                    d.dayKey * 86400000,
-                    isUtc: true);
-                final label =
-                    '${date.month}/${date.day}';
-                final maxCount = dailyCounts
-                    .map((e) => e.totalCount)
-                    .reduce((a, b) => a > b ? a : b);
-                final fraction =
-                    maxCount == 0 ? 0.0 : d.totalCount / maxCount;
+                  dayKey * 86400000,
+                  isUtc: true,
+                );
                 return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: 48,
-                        child: Text(label,
-                            style: Theme.of(context).textTheme.bodySmall),
-                      ),
-                      Expanded(
-                        child: LinearProgressIndicator(
-                          value: fraction,
-                          minHeight: 12,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      SizedBox(
-                        width: 32,
-                        child: Text(
-                          '${d.totalCount}',
-                          textAlign: TextAlign.end,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ),
-                    ],
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '${date.month}/${date.day}',
+                    style: AppTheme.bodySmall.copyWith(fontSize: 10),
                   ),
                 );
-              }),
-          ],
+              },
+            ),
+          ),
+        ),
+        barTouchData: BarTouchData(
+          touchTooltipData: BarTouchTooltipData(
+            getTooltipColor: (_) => AppTheme.textPrimary,
+            getTooltipItem: (group, _, rod, _) => BarTooltipItem(
+              '${rod.toY.toInt()} 件',
+              const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
         ),
       ),
     );
   }
 }
 
-// ---------------------------------------------------------------------------
-// イベント別記録ランキングカード
-// ---------------------------------------------------------------------------
+// ── イベント別ランキングカード ─────────────────────────────────────────────────
 
 class _TopEventsCard extends StatelessWidget {
   const _TopEventsCard({required this.topEvents});
@@ -259,52 +323,62 @@ class _TopEventsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('イベント別記録数（Top 10）',
-                style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            if (topEvents.isEmpty)
-              const Text('データなし')
-            else
-              ...topEvents.asMap().entries.map((entry) {
+    return SectionCard(
+      title: 'イベント別記録数（Top 10）',
+      child: topEvents.isEmpty
+          ? const Padding(
+              padding: EdgeInsets.symmetric(vertical: AppTheme.spacingMd),
+              child: Center(child: Text('データなし')),
+            )
+          : Column(
+              children: topEvents.asMap().entries.map((entry) {
                 final rank = entry.key + 1;
                 final e = entry.value;
-                return ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading: CircleAvatar(
-                    radius: 14,
-                    backgroundColor:
-                        Theme.of(context).colorScheme.primaryContainer,
-                    child: Text(
-                      '$rank',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onPrimaryContainer,
-                            fontWeight: FontWeight.bold,
+                return Padding(
+                  padding:
+                      const EdgeInsets.only(bottom: AppTheme.spacingSm),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: rank <= 3
+                              ? AppTheme.primary.withValues(alpha: 0.15)
+                              : AppTheme.background,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Center(
+                          child: Text(
+                            '$rank',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: rank <= 3
+                                  ? AppTheme.primary
+                                  : AppTheme.textSecondary,
+                            ),
                           ),
-                    ),
-                  ),
-                  title: Text(
-                    e.eventTitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  trailing: Text(
-                    '${e.recordCount} 件',
-                    style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                      const SizedBox(width: AppTheme.spacingSm),
+                      Expanded(
+                        child: Text(
+                          e.eventTitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTheme.bodyMedium,
+                        ),
+                      ),
+                      Text(
+                        '${e.recordCount} 件',
+                        style: AppTheme.labelMedium,
+                      ),
+                    ],
                   ),
                 );
-              }),
-          ],
-        ),
-      ),
+              }).toList(),
+            ),
     );
   }
 }

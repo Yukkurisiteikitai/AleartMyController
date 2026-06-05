@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../widgets/feature_card_section.dart';
+import '../../widgets/section_card.dart';
+import '../../core/theme/app_theme.dart';
 import 'settings_notifier.dart';
 
 /// 設定画面（Android: SettingsScreen / SettingsViewModel 相当）。
-///
-/// - インターバル / 通知 ON-OFF / Supabase サインイン再試行 / クラウド同期トグル /
-///   ローカルキュー要約を実装する（migration_plan.md §6.2 / §9）。
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
@@ -14,140 +14,206 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(settingsNotifierProvider);
     final notifier = ref.read(settingsNotifierProvider.notifier);
-    final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('設定')),
+      backgroundColor: AppTheme.background,
+      appBar: AppBar(title: const Text('設定・連携')),
       body: ListView(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppTheme.spacingMd,
+          vertical: AppTheme.spacingMd,
+        ),
         children: [
-          // ---------------------------------------------------------------
-          // Supabase 認証セクション
-          // ---------------------------------------------------------------
-          _SectionHeader(title: 'クラウド認証'),
-          if (!state.isSignedIn) ...[
-            ListTile(
-              leading: const Icon(Icons.cloud_off, color: Colors.orange),
-              title: const Text('Supabase 未サインイン'),
-              subtitle: const Text('クラウド同期を使うにはサインインが必要です。'),
+          // ── Google 連携カード ────────────────────────────────────────────
+          _GoogleConnectionCard(state: state, notifier: notifier),
+          const SizedBox(height: AppTheme.spacingMd),
+
+          // ── こんなことができます ─────────────────────────────────────────
+          const FeatureCardSection(),
+          const SizedBox(height: AppTheme.spacingMd),
+
+          // ── クラウド同期 ─────────────────────────────────────────────────
+          SectionCard(
+            title: 'クラウド同期',
+            child: SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              secondary: const Icon(Icons.sync, color: AppTheme.primary),
+              title: const Text('クラウド同期を有効にする'),
+              subtitle: const Text('OFF にすると写真・メモはローカルにのみ保存されます。'),
+              value: state.cloudSyncEnabled,
+              onChanged: (v) => notifier.setCloudSyncEnabled(v),
             ),
-            Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: FilledButton.icon(
-                onPressed:
-                    state.isSigningIn ? null : () => notifier.retrySignIn(),
-                icon: state.isSigningIn
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.login),
-                label:
-                    Text(state.isSigningIn ? 'サインイン中…' : 'Google でサインイン'),
-              ),
-            ),
-            if (state.signInError != null)
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                child: Text(
-                  'エラー: ${state.signInError}',
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.error),
+          ),
+          const SizedBox(height: AppTheme.spacingMd),
+
+          // ── 未同期件数 ──────────────────────────────────────────────────
+          SectionCard(
+            title: 'ローカルキュー',
+            child: Row(
+              children: [
+                const Icon(Icons.pending_actions, color: AppTheme.textSecondary),
+                const SizedBox(width: AppTheme.spacingMd),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('未同期の記録'),
+                      const SizedBox(height: 2),
+                      Text(
+                        state.unsyncedCount > 0
+                            ? 'クラウド同期が有効になると自動的に送信されます。'
+                            : 'すべて同期済みです。',
+                        style: AppTheme.bodySmall,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-          ] else ...[
-            ListTile(
-              leading: const Icon(Icons.cloud_done, color: Colors.green),
-              title: const Text('Supabase サインイン済み'),
+                Text(
+                  '${state.unsyncedCount} 件',
+                  style: AppTheme.titleMedium.copyWith(
+                    color: state.unsyncedCount > 0
+                        ? AppTheme.warning
+                        : AppTheme.success,
+                  ),
+                ),
+              ],
             ),
-          ],
-          const Divider(),
-
-          // ---------------------------------------------------------------
-          // クラウド同期トグル（§9: shared_preferences で永続化）
-          // ---------------------------------------------------------------
-          _SectionHeader(title: 'クラウド同期'),
-          SwitchListTile(
-            secondary: const Icon(Icons.sync),
-            title: const Text('クラウド同期を有効にする'),
-            subtitle: const Text(
-                'OFF にすると写真・メモはローカルにのみ保存されます。'),
-            value: state.cloudSyncEnabled,
-            onChanged: (v) => notifier.setCloudSyncEnabled(v),
           ),
-          const Divider(),
+          const SizedBox(height: AppTheme.spacingMd),
 
-          // ---------------------------------------------------------------
-          // ローカルキュー要約（未同期件数）
-          // ---------------------------------------------------------------
-          _SectionHeader(title: 'ローカルキュー'),
-          ListTile(
-            leading: const Icon(Icons.pending_actions),
-            title: const Text('未同期の記録'),
-            trailing: Text(
-              '${state.unsyncedCount} 件',
-              style: theme.textTheme.bodyLarge,
+          // ── 通知 ────────────────────────────────────────────────────────
+          SectionCard(
+            title: '通知',
+            child: SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              secondary:
+                  const Icon(Icons.notifications, color: AppTheme.primary),
+              title: const Text('リマインダー通知'),
+              subtitle: const Text('進行中のイベントがあるときに通知します。'),
+              value: state.notificationsEnabled,
+              onChanged: (v) => notifier.setNotificationsEnabled(v),
             ),
-            subtitle: state.unsyncedCount > 0
-                ? const Text('クラウド同期が有効になると自動的に送信されます。')
-                : const Text('すべて同期済みです。'),
           ),
-          const Divider(),
+          const SizedBox(height: AppTheme.spacingMd),
 
-          // ---------------------------------------------------------------
-          // 通知
-          // ---------------------------------------------------------------
-          _SectionHeader(title: '通知'),
-          SwitchListTile(
-            secondary: const Icon(Icons.notifications),
-            title: const Text('リマインダー通知'),
-            subtitle: const Text('進行中のイベントがあるときに通知します。'),
-            value: state.notificationsEnabled,
-            onChanged: (v) => notifier.setNotificationsEnabled(v),
+          // ── 記録インターバル ─────────────────────────────────────────────
+          SectionCard(
+            title: '記録インターバル',
+            child: _IntervalSelector(
+              currentMinutes: state.intervalMinutes,
+              presetOrder: state.presetOrder,
+              onChanged: notifier.setIntervalMinutes,
+            ),
           ),
-          const Divider(),
-
-          // ---------------------------------------------------------------
-          // インターバル
-          // ---------------------------------------------------------------
-          _SectionHeader(title: '記録インターバル'),
-          _IntervalSelector(
-            currentMinutes: state.intervalMinutes,
-            presetOrder: state.presetOrder,
-            onChanged: notifier.setIntervalMinutes,
-          ),
-          const Divider(),
+          const SizedBox(height: AppTheme.spacingLg),
         ],
       ),
     );
   }
 }
 
-// ---------------------------------------------------------------------------
-// Helper widgets
-// ---------------------------------------------------------------------------
+// ── Google 連携カード ──────────────────────────────────────────────────────────
 
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.title});
-  final String title;
+class _GoogleConnectionCard extends StatelessWidget {
+  const _GoogleConnectionCard({
+    required this.state,
+    required this.notifier,
+  });
+
+  final SettingsState state;
+  final SettingsNotifier notifier;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-      child: Text(
-        title,
-        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: Theme.of(context).colorScheme.primary,
+    return Container(
+      decoration: BoxDecoration(
+        color: state.isSignedIn
+            ? AppTheme.success.withValues(alpha: 0.08)
+            : AppTheme.primary.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        border: Border.all(
+          color: state.isSignedIn
+              ? AppTheme.success.withValues(alpha: 0.3)
+              : AppTheme.divider,
+        ),
+      ),
+      padding: const EdgeInsets.all(AppTheme.spacingMd),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: AppTheme.surface,
+              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+              border: Border.all(color: AppTheme.divider),
             ),
+            child: Icon(
+              Icons.account_circle_rounded,
+              color: state.isSignedIn ? AppTheme.success : AppTheme.textSecondary,
+              size: 28,
+            ),
+          ),
+          const SizedBox(width: AppTheme.spacingMd),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Google 連携',
+                  style: AppTheme.titleMedium,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  state.isSignedIn
+                      ? 'カレンダーと同期中'
+                      : 'サインインしてカレンダーを同期',
+                  style: AppTheme.bodySmall,
+                ),
+                if (state.signInError != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    state.signInError!,
+                    style: AppTheme.bodySmall.copyWith(color: Colors.red),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (!state.isSignedIn)
+            FilledButton(
+              onPressed:
+                  state.isSigningIn ? null : () => notifier.retrySignIn(),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(72, 36),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                textStyle: const TextStyle(fontSize: 13),
+              ),
+              child: state.isSigningIn
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text('接続'),
+            )
+          else
+            Icon(
+              Icons.check_circle_rounded,
+              color: AppTheme.success,
+              size: 28,
+            ),
+        ],
       ),
     );
   }
 }
 
-/// インターバル選択（プリセット + カスタム）。
+// ── インターバルセレクタ ────────────────────────────────────────────────────────
+
 class _IntervalSelector extends StatelessWidget {
   const _IntervalSelector({
     required this.currentMinutes,
@@ -188,6 +254,8 @@ class _IntervalSelector extends StatelessWidget {
         children: presets.map((minutes) {
           final label = _labels[minutes] ?? '$minutes 分';
           return RadioListTile<int>(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
             title: Text(label),
             value: minutes,
           );

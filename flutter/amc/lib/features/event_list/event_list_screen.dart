@@ -3,15 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/theme/app_theme.dart';
 import '../../data/local/database.dart';
 import '../../data/local/daos/record_dao.dart';
+import '../../widgets/brand_header.dart';
+import '../../widgets/donut_progress.dart';
+import '../../widgets/mascot_widget.dart';
 import 'event_list_notifier.dart';
 
 /// ホーム（イベント一覧）画面（Android: EventListScreen / EventListViewModel 相当）。
-///
-/// - upcoming events を表示（local-draft:% は Repository 側で除外済み）。
-/// - 記録件数バッジを各イベントに表示（左結合で0件も表示）。
-/// - イベント削除は確認ダイアログ → records を巻き込まない（§9）。
 class EventListScreen extends ConsumerWidget {
   const EventListScreen({super.key});
 
@@ -20,7 +20,6 @@ class EventListScreen extends ConsumerWidget {
     final state = ref.watch(eventListNotifierProvider);
     final notifier = ref.read(eventListNotifierProvider.notifier);
 
-    // 同期エラーをスナックバーで通知。
     ref.listen<EventListState>(eventListNotifierProvider, (prev, next) {
       if (next.syncError != null && next.syncError != prev?.syncError) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -32,9 +31,20 @@ class EventListScreen extends ConsumerWidget {
       }
     });
 
+    // 達成率: 記録ありのイベント / 全イベント
+    final totalEvents = state.events.length;
+    final eventsWithRecords = state.events.where((e) {
+      final c = state.countFor(e.eventId);
+      return c.photoCount + c.memoCount > 0;
+    }).length;
+    final progress =
+        totalEvents == 0 ? 0.0 : (eventsWithRecords / totalEvents).clamp(0.0, 1.0);
+
     return Scaffold(
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
-        title: const Text('イベント一覧'),
+        titleSpacing: 0,
+        title: const BrandHeader(),
         actions: [
           if (state.isSyncing)
             const Padding(
@@ -60,22 +70,63 @@ class EventListScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: state.events.isEmpty
-          ? const _EmptyState()
-          : ListView.builder(
-              itemCount: state.events.length,
-              itemBuilder: (context, index) {
-                final event = state.events[index];
-                final count = state.countFor(event.eventId);
-                return _EventListItem(
-                  event: event,
-                  count: count,
-                  onTap: () =>
-                      context.push('/events/${event.eventId}'),
-                  onDelete: () => _confirmDelete(context, notifier, event),
-                );
-              },
+      body: CustomScrollView(
+        slivers: [
+          // ── 今日の進捗カード ─────────────────────────────────────────
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppTheme.spacingMd,
+                AppTheme.spacingMd,
+                AppTheme.spacingMd,
+                AppTheme.spacingSm,
+              ),
+              child: _TodaySummaryCard(
+                progress: progress,
+                eventsWithRecords: eventsWithRecords,
+                totalEvents: totalEvents,
+              ),
             ),
+          ),
+
+          // ── Google 未連携バナー ──────────────────────────────────────
+          // (設定画面へのナビゲーションのみ。isSignedIn は settingsProvider 不使用のため
+          //  同期ボタンの存在で代替)
+
+          // ── イベントリスト ───────────────────────────────────────────
+          if (state.events.isEmpty)
+            const SliverFillRemaining(child: _EmptyState())
+          else ...[
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppTheme.spacingMd,
+              ),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final event = state.events[index];
+                    final count = state.countFor(event.eventId);
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: AppTheme.spacingSm),
+                      child: _EventCard(
+                        event: event,
+                        count: count,
+                        onTap: () => context.push('/events/${event.eventId}'),
+                        onDelete: () =>
+                            _confirmDelete(context, notifier, event),
+                      ),
+                    );
+                  },
+                  childCount: state.events.length,
+                ),
+              ),
+            ),
+            const SliverToBoxAdapter(
+              child: SizedBox(height: AppTheme.spacingLg),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -109,8 +160,108 @@ class EventListScreen extends ConsumerWidget {
   }
 }
 
-class _EventListItem extends StatelessWidget {
-  const _EventListItem({
+// ── 今日の進捗サマリーカード ──────────────────────────────────────────────────
+
+class _TodaySummaryCard extends StatelessWidget {
+  const _TodaySummaryCard({
+    required this.progress,
+    required this.eventsWithRecords,
+    required this.totalEvents,
+  });
+
+  final double progress;
+  final int eventsWithRecords;
+  final int totalEvents;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.primary,
+            AppTheme.primaryLight,
+          ],
+        ),
+        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+      ),
+      padding: const EdgeInsets.all(AppTheme.spacingMd),
+      child: Row(
+        children: [
+          // 左: テキスト + stats
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '今日の記録',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: AppTheme.spacingXs),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '$eventsWithRecords',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 40,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        ' / $totalEvents イベント',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppTheme.spacingSm),
+                Text(
+                  totalEvents == 0 ? 'イベントを同期しましょう' : '記録のあるイベント',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // 中: ドーナツ
+          DonutProgress(
+            value: progress,
+            size: 100,
+            color: Colors.white,
+            backgroundColor: Colors.white24,
+            centerTextStyle: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(width: AppTheme.spacingSm),
+          // 右: マスコット
+          const MascotWidget(size: 72),
+        ],
+      ),
+    );
+  }
+}
+
+// ── イベントカード ────────────────────────────────────────────────────────────
+
+class _EventCard extends StatelessWidget {
+  const _EventCard({
     required this.event,
     required this.count,
     required this.onTap,
@@ -124,102 +275,107 @@ class _EventListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     final start = DateTime.fromMillisecondsSinceEpoch(event.startTime);
     final end = DateTime.fromMillisecondsSinceEpoch(event.endTime);
     final dateFmt = DateFormat('M/d(E)', 'ja');
     final timeFmt = DateFormat('HH:mm', 'ja');
-    final dateStr = dateFmt.format(start);
-    final timeStr = '${timeFmt.format(start)} – ${timeFmt.format(end)}';
+    final hasRecord = count.photoCount + count.memoCount > 0;
 
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              // 日付カラム
-              SizedBox(
-                width: 56,
-                child: Column(
-                  children: [
-                    Text(
-                      dateStr,
-                      style: Theme.of(context).textTheme.labelSmall,
-                      textAlign: TextAlign.center,
-                    ),
-                    Text(
-                      timeFmt.format(start),
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppTheme.surface,
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          border: Border.all(
+            color: hasRecord
+                ? AppTheme.primary.withValues(alpha: 0.3)
+                : AppTheme.divider,
+          ),
+        ),
+        padding: const EdgeInsets.all(AppTheme.spacingMd),
+        child: Row(
+          children: [
+            // 日付カラム
+            Container(
+              width: 52,
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(AppTheme.radiusSm),
               ),
-              const SizedBox(width: 12),
-              // タイトル + 時刻
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      event.title,
-                      style: Theme.of(context).textTheme.titleSmall,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      timeStr,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              // バッジ
-              Column(
+              child: Column(
                 children: [
-                  if (count.photoCount > 0)
-                    _Badge(
-                      icon: Icons.photo_camera_outlined,
-                      count: count.photoCount,
-                      color: colorScheme.primary,
-                    ),
-                  if (count.memoCount > 0)
-                    _Badge(
-                      icon: Icons.notes_outlined,
-                      count: count.memoCount,
-                      color: colorScheme.secondary,
-                    ),
+                  Text(
+                    dateFmt.format(start),
+                    style: AppTheme.bodySmall.copyWith(fontSize: 10),
+                    textAlign: TextAlign.center,
+                  ),
+                  Text(
+                    timeFmt.format(start),
+                    style: AppTheme.labelMedium.copyWith(fontSize: 13),
+                    textAlign: TextAlign.center,
+                  ),
                 ],
               ),
-              // 削除ボタン
-              IconButton(
-                icon: const Icon(Icons.delete_outline),
-                iconSize: 20,
-                color: colorScheme.onSurfaceVariant,
-                tooltip: '一覧から削除',
-                onPressed: onDelete,
+            ),
+            const SizedBox(width: AppTheme.spacingMd),
+            // タイトル + 時刻範囲
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    event.title,
+                    style: AppTheme.titleMedium,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${timeFmt.format(start)} – ${timeFmt.format(end)}',
+                    style: AppTheme.bodySmall,
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+            const SizedBox(width: AppTheme.spacingSm),
+            // バッジ列
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (count.photoCount > 0)
+                  _CountBadge(
+                    icon: Icons.photo_camera_outlined,
+                    count: count.photoCount,
+                  ),
+                if (count.memoCount > 0)
+                  _CountBadge(
+                    icon: Icons.notes_outlined,
+                    count: count.memoCount,
+                    color: const Color(0xFF7C4DFF),
+                  ),
+              ],
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline),
+              iconSize: 18,
+              color: AppTheme.textSecondary,
+              onPressed: onDelete,
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _Badge extends StatelessWidget {
-  const _Badge({
+class _CountBadge extends StatelessWidget {
+  const _CountBadge({
     required this.icon,
     required this.count,
-    required this.color,
+    this.color = AppTheme.primary,
   });
 
   final IconData icon;
@@ -228,16 +384,23 @@ class _Badge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 14, color: color),
-        const SizedBox(width: 2),
-        Text(
-          '$count',
-          style: TextStyle(fontSize: 12, color: color),
-        ),
-      ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: 2),
+          Text(
+            '$count',
+            style: TextStyle(
+              fontSize: 12,
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -251,20 +414,25 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.event_outlined,
-            size: 64,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.event_outlined,
+              size: 36,
+              color: AppTheme.primary,
+            ),
           ),
-          const SizedBox(height: 16),
-          Text(
-            'イベントがありません',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppTheme.spacingMd),
+          Text('イベントがありません', style: AppTheme.titleMedium),
+          const SizedBox(height: AppTheme.spacingSm),
           Text(
             '右上の同期ボタンでカレンダーを読み込んでください',
-            style: Theme.of(context).textTheme.bodySmall,
+            style: AppTheme.bodySmall,
             textAlign: TextAlign.center,
           ),
         ],
