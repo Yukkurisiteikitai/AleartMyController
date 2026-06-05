@@ -35,13 +35,58 @@ class SettingsScreen extends ConsumerWidget {
           // ── クラウド同期 ─────────────────────────────────────────────────
           SectionCard(
             title: 'クラウド同期',
-            child: SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              secondary: const Icon(Icons.sync, color: AppTheme.primary),
-              title: const Text('クラウド同期を有効にする'),
-              subtitle: const Text('OFF にすると写真・メモはローカルにのみ保存されます。'),
-              value: state.cloudSyncEnabled,
-              onChanged: (v) => notifier.setCloudSyncEnabled(v),
+            child: Column(
+              children: [
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  secondary: const Icon(Icons.sync, color: AppTheme.primary),
+                  title: const Text('クラウド同期を有効にする'),
+                  subtitle: const Text('OFF にすると写真・メモはローカルにのみ保存されます。'),
+                  value: state.cloudSyncEnabled,
+                  onChanged: (v) => notifier.setCloudSyncEnabled(v),
+                ),
+                const Divider(height: 1),
+                const SizedBox(height: AppTheme.spacingSm),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('クラウドから取得'),
+                          if (state.lastSyncError != null)
+                            Text(
+                              state.lastSyncError!,
+                              style: AppTheme.bodySmall
+                                  .copyWith(color: AppTheme.warning),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            )
+                          else
+                            Text(
+                              '他のデバイスの記録をこの端末に取り込みます。',
+                              style: AppTheme.bodySmall,
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: AppTheme.spacingSm),
+                    FilledButton.tonal(
+                      onPressed: state.isSyncing || !state.isSignedIn
+                          ? null
+                          : notifier.syncNow,
+                      child: state.isSyncing
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('今すぐ同期'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppTheme.spacingSm),
+              ],
             ),
           ),
           const SizedBox(height: AppTheme.spacingMd),

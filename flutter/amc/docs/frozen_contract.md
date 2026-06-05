@@ -80,6 +80,7 @@ RecordRepository
   Future<void>        deleteRecord(int recordId)
   Future<List<Photo>> getPhotosForRecord(int recordId)
   Future<List<Memo>>  getMemosForRecord(int recordId)
+  Future<void>        pullFromCloud(SupabaseClient? client)                    // cloud→local pull, null-safe
 
 EventRepository
   Stream<List<Event>> watchUpcomingEvents()

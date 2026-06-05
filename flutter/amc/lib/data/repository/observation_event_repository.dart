@@ -28,4 +28,26 @@ class ObservationEventRepository {
   }
 
   Future<ObservationEvent?> findById(int obsEventId) => _dao.findById(obsEventId);
+
+  /// cloud pull 専用: 既存行があれば返し、なければ新規作成する。
+  /// Event row を持たないクラウド由来レコードに使う（Event.googleEventId の代わりに生の文字列で解決）。
+  Future<int> findOrCreateByRaw({
+    required String googleEventId,
+    required String title,
+    required int startTime,
+    required int endTime,
+  }) async {
+    final existing = await _dao.findByGoogleEventId(googleEventId);
+    if (existing != null) return existing.obsEventId;
+    await _dao.insertOrIgnore(
+      ObservationEventsCompanion.insert(
+        googleEventId: Value(googleEventId),
+        title: title,
+        startTime: startTime,
+        endTime: endTime,
+      ),
+    );
+    final created = await _dao.findByGoogleEventId(googleEventId);
+    return created!.obsEventId;
+  }
 }

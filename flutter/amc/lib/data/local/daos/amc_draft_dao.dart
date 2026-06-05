@@ -73,6 +73,14 @@ class AmcDraftDao extends DatabaseAccessor<AppDatabase>
     ));
   }
 
+  /// クラウド pull の重複チェック用：既存 remoteRecordId の Set を返す。
+  Future<Set<String>> getExistingRemoteRecordIds() async {
+    final rows = await (select(amcDraftRecords)
+          ..where((t) => t.remoteRecordId.isNotNull()))
+        .get();
+    return {for (final r in rows) if (r.remoteRecordId != null) r.remoteRecordId!};
+  }
+
   Future<void> markFailed(int draftRecordId) {
     return (update(amcDraftRecords)
           ..where((t) => t.draftRecordId.equals(draftRecordId)))

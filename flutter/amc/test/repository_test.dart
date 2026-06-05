@@ -21,6 +21,7 @@ void main() {
       photoDao: db.photoDao,
       memoDao: db.memoDao,
       observationEventRepository: obsRepo,
+      amcDraftDao: db.amcDraftDao,
     );
   });
 

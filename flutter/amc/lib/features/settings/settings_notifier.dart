@@ -33,6 +33,8 @@ class SettingsState {
     this.isSigningIn = false,
     this.signInError,
     this.unsyncedCount = 0,
+    this.isSyncing = false,
+    this.lastSyncError,
   });
 
   final int intervalMinutes;
@@ -44,6 +46,8 @@ class SettingsState {
   final bool isSigningIn;
   final String? signInError;
   final int unsyncedCount;
+  final bool isSyncing;
+  final String? lastSyncError;
 
   SettingsState copyWith({
     int? intervalMinutes,
@@ -55,6 +59,8 @@ class SettingsState {
     bool? isSigningIn,
     Object? signInError = _sentinel,
     int? unsyncedCount,
+    bool? isSyncing,
+    Object? lastSyncError = _sentinel,
   }) {
     return SettingsState(
       intervalMinutes: intervalMinutes ?? this.intervalMinutes,
@@ -68,6 +74,10 @@ class SettingsState {
       signInError:
           signInError == _sentinel ? this.signInError : signInError as String?,
       unsyncedCount: unsyncedCount ?? this.unsyncedCount,
+      isSyncing: isSyncing ?? this.isSyncing,
+      lastSyncError: lastSyncError == _sentinel
+          ? this.lastSyncError
+          : lastSyncError as String?,
     );
   }
 }
@@ -161,6 +171,19 @@ class SettingsNotifier extends Notifier<SettingsState> {
     state = state.copyWith(cloudSyncEnabled: enabled);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_kCloudSyncEnabled, enabled);
+  }
+
+  /// Cloud→Local データ pull（§波14）。失敗時はエラー表示、クラッシュしない。
+  Future<void> syncNow() async {
+    if (state.isSyncing) return;
+    state = state.copyWith(isSyncing: true, lastSyncError: null);
+    try {
+      final client = ref.read(supabaseClientProvider);
+      await ref.read(recordRepositoryProvider).pullFromCloud(client);
+      state = state.copyWith(isSyncing: false);
+    } catch (e) {
+      state = state.copyWith(isSyncing: false, lastSyncError: e.toString());
+    }
   }
 
   /// Supabase 再サインイン導線（§9 不変条件: 失敗時はエラー表示、クラッシュしない）。
