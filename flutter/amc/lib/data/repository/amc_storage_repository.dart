@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -56,6 +57,10 @@ class AmcStorageRepository {
     required String storagePath,
     required String mimeType,
   }) async {
+    if (kIsWeb) {
+      // TODO(web): Blob ダウンロード方針（後フェーズ）— Web ではローカルファイルパスが使えない。
+      throw UnsupportedError('Web でのローカル保存は未実装です（後フェーズで Blob ダウンロード方針に切り替え）');
+    }
     final bytes = await downloadBytes(storagePath);
     final ext = _extensionFor(mimeType);
     final dir = await getApplicationDocumentsDirectory();

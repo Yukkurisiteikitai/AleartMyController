@@ -52,6 +52,12 @@ class AmcAttachmentUploadWorker {
   ) async {
     await attachmentDao.markUploading(att.attachmentId);
     try {
+      if (kIsWeb) {
+        // Web では localUri が Blob URL になるため File 経由の読み込みは不可。
+        // TODO(web): IndexedDB から Blob を取得する方針（後フェーズ）。
+        await attachmentDao.markFailed(att.attachmentId, errorCode: 'WEB_FILE_READ_UNSUPPORTED');
+        return;
+      }
       final file = File(_localPath(att.localUri));
       if (!file.existsSync()) {
         await attachmentDao.markFailed(att.attachmentId, errorCode: 'FILE_NOT_FOUND');

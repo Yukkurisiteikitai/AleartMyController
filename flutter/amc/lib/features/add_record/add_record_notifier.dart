@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -144,9 +145,15 @@ class AddRecordNotifier extends Notifier<AddRecordState> {
   Future<void> addPhotoFromGallery() =>
       _pickAndAddPhoto(ImageSource.gallery);
 
+  // TODO(web): 写真パスは Blob/IndexedDB 方針（後フェーズ）— Web では File 経由のローカルパスが使えない。
   Future<void> _pickAndAddPhoto(ImageSource source) async {
     final event = state.event;
     if (event == null || state.isBusy) return;
+
+    if (kIsWeb) {
+      state = state.copyWith(errorMessage: '写真機能は Web では未対応です（後フェーズで Blob 方針に切り替え）');
+      return;
+    }
 
     state = state.copyWith(isBusy: true, errorMessage: null);
     try {
@@ -268,6 +275,10 @@ class AddRecordNotifier extends Notifier<AddRecordState> {
   /// 音声認識を開始する。
   Future<void> startVoiceInput() async {
     if (state.isListening) return;
+    if (kIsWeb) {
+      state = state.copyWith(errorMessage: '音声認識は Web では未対応です');
+      return;
+    }
     final available = await _stt.initialize(
       onError: (e) => state = state.copyWith(
         isListening: false,

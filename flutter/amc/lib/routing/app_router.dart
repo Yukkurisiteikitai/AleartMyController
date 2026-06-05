@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/add_record/add_record_screen.dart';
@@ -9,25 +11,46 @@ import '../features/event_list/event_list_screen.dart';
 import '../features/history/history_screen.dart';
 import '../features/record_detail/record_detail_screen.dart';
 import '../features/settings/settings_screen.dart';
+import '../features/setup/setup_notifier.dart';
 import '../features/setup/setup_screen.dart';
 
-/// アプリ全体のルート定義（Android: Screen.kt / AppNavHost 相当）。
+/// GoRouter + Riverpod 統合用 ChangeNotifier。
 ///
-/// P0 で全ルートを「スタブ画面」付きで先に確定させる。Wave 2 の各機能エージェントは
-/// ここを編集せず、対応する features/*/ の画面本文だけを差し替える。
+/// appLaunchProvider の変化を listen してルーターにリフレッシュを通知し、
+/// redirect でオンボーディング完了フラグを参照する（migration_plan.md §6.2）。
+class _RouterNotifier extends ChangeNotifier {
+  _RouterNotifier(this._ref) {
+    _ref.listen(appLaunchProvider, (_, _) => notifyListeners());
+  }
+
+  final Ref _ref;
+
+  String? redirect(BuildContext context, GoRouterState state) {
+    // Web はオンボーディング不要のため redirect をスキップする（§8）。
+    if (kIsWeb) return null;
+    final setupDone = _ref.read(appLaunchProvider).asData?.value ?? false;
+    final isSetup = state.matchedLocation == '/setup';
+    if (!setupDone && !isSetup) return '/setup';
+    if (setupDone && isSetup) return '/events';
+    return null;
+  }
+}
+
+final _rootKey = GlobalKey<NavigatorState>();
+
+/// GoRouter インスタンス provider。
 ///
-/// ボトムバー（ホーム / 履歴 / 分析）+ 中央 FAB（突発下書き開始）は
-/// StatefulShellRoute.indexedStack で再現する。
-class AppRouter {
-  AppRouter._();
+/// appLaunchProvider を refreshListenable で監視し、セットアップ完了時に
+/// /setup ↔ /events の redirect を自動再評価する。
+/// app.dart で `ref.watch(routerProvider)` して MaterialApp.router に渡す。
+final routerProvider = Provider<GoRouter>((ref) {
+  final notifier = _RouterNotifier(ref);
 
-  static final _rootKey = GlobalKey<NavigatorState>();
-
-  // TODO(P3/setup): onboarding 完了フラグ(first_run_setup_complete)で
-  // /setup ↔ /events を redirect 制御する（AppNavHost.onboardingComplete 相当）。
-  static final GoRouter router = GoRouter(
+  final router = GoRouter(
     navigatorKey: _rootKey,
     initialLocation: '/events',
+    refreshListenable: notifier,
+    redirect: notifier.redirect,
     routes: [
       GoRoute(
         path: '/setup',
@@ -105,7 +128,14 @@ class AppRouter {
       ),
     ],
   );
-}
+
+  ref.onDispose(() {
+    notifier.dispose();
+    router.dispose();
+  });
+
+  return router;
+});
 
 /// ボトムナビゲーション + 中央 FAB（突発下書き開始）のシェル。
 /// Android の `Scaffold(bottomBar, FAB)` 相当。

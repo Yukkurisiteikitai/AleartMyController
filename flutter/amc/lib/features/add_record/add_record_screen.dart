@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../data/local/daos/record_dao.dart';
 import '../../data/local/tables.dart';
@@ -29,7 +31,18 @@ class _AddRecordScreenState extends ConsumerState<AddRecordScreen> {
     // ウィジェットツリー構築後に init を呼ぶ（build 中の state 変更を避ける）。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(addRecordNotifierProvider.notifier).init(widget.eventId);
+      if (!kIsWeb) _requestMediaPermissions();
     });
+  }
+
+  /// Android 13+ POST_NOTIFICATIONS + カメラ・マイク権限を要求する（P5, §3）。
+  /// 既に付与済みの場合は何もしない。
+  Future<void> _requestMediaPermissions() async {
+    await [
+      Permission.notification,
+      Permission.camera,
+      Permission.microphone,
+    ].request();
   }
 
   @override

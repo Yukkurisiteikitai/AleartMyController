@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -13,8 +14,20 @@ import '../data/repository/record_repository.dart';
 import 'database_providers.dart';
 import 'supabase_providers.dart';
 
+// Supabase が要求する Google OAuth Web Client ID（idToken 取得に必要）。
+// defaultValue は local.properties の SUPABASE_GOOGLE_WEB_CLIENT_ID と同値。
+const _googleWebClientId = String.fromEnvironment(
+  'SUPABASE_GOOGLE_WEB_CLIENT_ID',
+  defaultValue:
+      '900637494289-fu2ut4f59boqi4a123hpmk6ujequ7a02.apps.googleusercontent.com',
+);
+
 final googleSignInProvider = Provider<GoogleSignIn>(
-  (ref) => GoogleSignIn(scopes: AuthRepository.defaultScopes),
+  (ref) => GoogleSignIn(
+    scopes: AuthRepository.defaultScopes,
+    // web は serverClientId 非対応（index.html の meta タグで代替）。
+    serverClientId: kIsWeb ? null : _googleWebClientId,
+  ),
 );
 
 final authRepositoryProvider = Provider<AuthRepository>(

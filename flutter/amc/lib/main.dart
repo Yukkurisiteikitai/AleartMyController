@@ -10,14 +10,19 @@ import 'services/amc_record_sync_worker.dart';
 import 'services/notification_service.dart';
 import 'services/reminder_worker.dart';
 
-/// Supabase の接続情報は --dart-define で渡す。
+/// Supabase の接続情報。
 ///
-///   flutter run --dart-define=SUPABASE_URL=https://xxx.supabase.co \
-///               --dart-define=SUPABASE_ANON_KEY=eyJ...
-///
-/// TODO(P0): CI / ローカル開発用の値供給方法を決める（dart-define-from-file 等）。
-const _supabaseUrl = String.fromEnvironment('SUPABASE_URL');
-const _supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+/// --dart-define-from-file=dart_defines.json（make run / make run-web）で上書き可能。
+/// defaultValue はプロジェクトの公開 anon key（Supabase の RLS がアクセス制御を担保）。
+const _supabaseUrl = String.fromEnvironment(
+  'SUPABASE_URL',
+  defaultValue: 'https://zsbizfmloonyhytomblh.supabase.co',
+);
+const _supabaseAnonKey = String.fromEnvironment(
+  'SUPABASE_ANON_KEY',
+  defaultValue:
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpzYml6Zm1sb29ueWh5dG9tYmxoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAyOTA4NzAsImV4cCI6MjA5NTg2Njg3MH0.oSO30x0iw2ioxwKiMlTIjtM5qfw4OwQFBjQM9Ug_6C8',
+);
 
 /// workmanager コールバック（別 isolate で呼ばれる）。
 ///

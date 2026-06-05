@@ -9,11 +9,18 @@
 
 import 'package:amc/app.dart';
 import 'package:amc/data/local/database.dart';
+import 'package:amc/features/setup/setup_notifier.dart';
 import 'package:amc/providers/database_providers.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+/// セットアップ完了済みを返すスタブ（テスト用）。
+class _SetupCompleteNotifier extends AppLaunchNotifier {
+  @override
+  Future<bool> build() async => true;
+}
 
 void main() {
   testWidgets(
@@ -24,7 +31,11 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [appDatabaseProvider.overrideWithValue(db)],
+          overrides: [
+            appDatabaseProvider.overrideWithValue(db),
+            // セットアップ完了済みとして router の /setup リダイレクトを回避する。
+            appLaunchProvider.overrideWith(_SetupCompleteNotifier.new),
+          ],
           child: const AmcApp(),
         ),
       );
