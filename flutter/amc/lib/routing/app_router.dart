@@ -151,15 +151,54 @@ class _ScaffoldWithNavBar extends StatelessWidget {
     );
   }
 
+  Future<void> _startNewRecording(BuildContext context) async {
+    final now = TimeOfDay.now();
+    final defaultTitle =
+        '記録 ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+    final controller = TextEditingController(text: defaultTitle);
+
+    final title = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('今すぐ記録を開始'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: 'タイトル',
+            hintText: '何を記録しますか？',
+          ),
+          autofocus: true,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (v) => Navigator.of(ctx).pop(v.trim().isEmpty ? defaultTitle : v.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(null),
+            child: const Text('キャンセル'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final t = controller.text.trim();
+              Navigator.of(ctx).pop(t.isEmpty ? defaultTitle : t);
+            },
+            child: const Text('開始'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (title != null && context.mounted) {
+      context.push('/dashboard?draftTitle=${Uri.encodeComponent(title)}');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: navigationShell,
-      // 突発記録ボタン: Material3 NavigationBar との共存のため endFloat に配置。
-      // TODO(P3/dashboard): 下書き作成ダイアログを挟む。今は直接 /dashboard へ。
       floatingActionButton: FloatingActionButton(
-        onPressed: () => context.push('/dashboard'),
-        tooltip: '突発記録を開始',
+        onPressed: () => _startNewRecording(context),
+        tooltip: '今すぐ記録を開始',
         child: const Icon(Icons.add),
       ),
       bottomNavigationBar: NavigationBar(

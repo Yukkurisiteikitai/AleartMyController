@@ -6,6 +6,9 @@ import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/local/database.dart';
 import '../../data/local/daos/record_dao.dart';
+import '../../data/local/tables.dart';
+import '../../features/history/history_notifier.dart';
+import '../../features/settings/settings_notifier.dart';
 import '../../widgets/brand_header.dart';
 import '../../widgets/donut_progress.dart';
 import 'event_list_notifier.dart';
@@ -19,6 +22,7 @@ class EventListScreen extends ConsumerWidget {
     final state = ref.watch(eventListNotifierProvider);
     final notifier = ref.read(eventListNotifierProvider.notifier);
 
+    // 同期エラー通知
     ref.listen<EventListState>(eventListNotifierProvider, (prev, next) {
       if (next.syncError != null && next.syncError != prev?.syncError) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -30,8 +34,23 @@ class EventListScreen extends ConsumerWidget {
       }
     });
 
-    // 今日のイベントだけに絞って達成率を計算する。
+    // ログイン完了時に自動でカレンダー同期を開始する
+    ref.listen<SettingsState>(settingsNotifierProvider, (prev, next) {
+      if (next.isSignedIn && !(prev?.isSignedIn ?? true)) {
+        notifier.syncFromCalendar();
+      }
+    });
+
+    // 今日のテキスト・写真記録（historyから取得）
+    final allRecords = ref.watch(historyNotifierProvider).records;
     final now = DateTime.now();
+    final todayRecords = allRecords.where((r) {
+      final d = DateTime.fromMillisecondsSinceEpoch(r.record.recordTime);
+      return d.year == now.year && d.month == now.month && d.day == now.day;
+    }).toList()
+      ..sort((a, b) => b.record.recordTime.compareTo(a.record.recordTime));
+
+    // 今日のイベントだけに絞って達成率を計算する。
     final todayEvents = state.events.where((e) {
       final d = DateTime.fromMillisecondsSinceEpoch(e.startTime);
       return d.year == now.year && d.month == now.month && d.day == now.day;
@@ -96,6 +115,47 @@ class EventListScreen extends ConsumerWidget {
           // ── Google 未連携バナー ──────────────────────────────────────
           // (設定画面へのナビゲーションのみ。isSignedIn は settingsProvider 不使用のため
           //  同期ボタンの存在で代替)
+
+          // ── 今日の記録ログ ─────────────────────────────────────────
+          if (todayRecords.isNotEmpty) ...[
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppTheme.spacingMd, AppTheme.spacingXs,
+                  AppTheme.spacingMd, AppTheme.spacingXs,
+                ),
+                child: Row(
+                  children: [
+                    Text('今日の記録', style: AppTheme.titleMedium),
+                    const SizedBox(width: AppTheme.spacingSm),
+                    Text('${todayRecords.length} 件',
+                        style: AppTheme.labelMedium),
+                  ],
+                ),
+              ),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: AppTheme.spacingMd),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final item = todayRecords[index];
+                    return Padding(
+                      padding:
+                          const EdgeInsets.only(bottom: AppTheme.spacingSm),
+                      child: _TodayRecordTile(
+                        item: item,
+                        onTap: () =>
+                            context.push('/record/${item.record.recordId}'),
+                      ),
+                    );
+                  },
+                  childCount: todayRecords.length,
+                ),
+              ),
+            ),
+          ],
 
           // ── イベントリスト ───────────────────────────────────────────
           if (state.events.isEmpty)
@@ -422,6 +482,62 @@ class _CountBadge extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _TodayRecordTile extends StatelessWidget {
+  const _TodayRecordTile({required this.item, required this.onTap});
+
+  final RecordWithAttachments item;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isPhoto = item.record.recordType == RecordType.photo;
+    final time = DateFormat('HH:mm').format(
+      DateTime.fromMillisecondsSinceEpoch(item.record.recordTime),
+    );
+    final label = isPhoto
+        ? '写真 ${item.photos.length} 枚'
+        : item.memos.isNotEmpty
+            ? item.memos.first.memoText
+            : 'メモ';
+    final iconColor = isPhoto ? AppTheme.primary : const Color(0xFF7C4DFF);
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppTheme.surface,
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          border: Border.all(color: AppTheme.divider),
+        ),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppTheme.spacingMd,
+          vertical: AppTheme.spacingSm,
+        ),
+        child: Row(
+          children: [
+            Icon(
+              isPhoto ? Icons.photo_camera_outlined : Icons.notes_outlined,
+              size: 18,
+              color: iconColor,
+            ),
+            const SizedBox(width: AppTheme.spacingSm),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTheme.bodyMedium,
+              ),
+            ),
+            Text(time, style: AppTheme.labelMedium),
+          ],
+        ),
       ),
     );
   }
