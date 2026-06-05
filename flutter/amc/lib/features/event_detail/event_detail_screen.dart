@@ -235,7 +235,7 @@ class _RecordTimelineItem extends StatelessWidget {
                         height: 120,
                         width: double.infinity,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
+                        errorBuilder: (_, _, _) => Container(
                           height: 120,
                           color: colorScheme.surfaceContainerHighest,
                           child: Icon(

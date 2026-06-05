@@ -178,19 +178,21 @@ class _IntervalSelector extends StatelessWidget {
         .whereType<int>()
         .toList();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: presets.map((minutes) {
-        final label = _labels[minutes] ?? '$minutes 分';
-        return RadioListTile<int>(
-          title: Text(label),
-          value: minutes,
-          groupValue: currentMinutes,
-          onChanged: (v) {
-            if (v != null) onChanged(v);
-          },
-        );
-      }).toList(),
+    return RadioGroup<int>(
+      groupValue: currentMinutes,
+      onChanged: (v) {
+        if (v != null) onChanged(v);
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: presets.map((minutes) {
+          final label = _labels[minutes] ?? '$minutes 分';
+          return RadioListTile<int>(
+            title: Text(label),
+            value: minutes,
+          );
+        }).toList(),
+      ),
     );
   }
 }

@@ -265,7 +265,7 @@ class _RecordList extends StatelessWidget {
     return ListView.separated(
       padding: const EdgeInsets.only(bottom: 80), // FAB の下に隠れない余白
       itemCount: records.length,
-      separatorBuilder: (_, __) => const Divider(height: 1, indent: 16),
+      separatorBuilder: (_, _) => const Divider(height: 1, indent: 16),
       itemBuilder: (context, index) {
         // 新しい順（末尾が最新）を上に表示するため逆順で取得
         final item = records[records.length - 1 - index];
