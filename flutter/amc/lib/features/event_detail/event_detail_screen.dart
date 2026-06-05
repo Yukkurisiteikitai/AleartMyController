@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -341,24 +344,31 @@ class _RecordTimelineItem extends StatelessWidget {
                   if (firstPhoto != null)
                     ClipRRect(
                       borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                      child: Image.asset(
-                        firstPhoto.filePath,
-                        height: 120,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => Container(
-                          height: 120,
-                          decoration: BoxDecoration(
-                            color: AppTheme.background,
-                            borderRadius:
-                                BorderRadius.circular(AppTheme.radiusSm),
-                          ),
-                          child: const Icon(
-                            Icons.broken_image_outlined,
-                            color: AppTheme.textSecondary,
-                          ),
-                        ),
-                      ),
+                      child: kIsWeb
+                          ? Container(
+                              height: 120,
+                              color: AppTheme.background,
+                              child: const Center(
+                                child: Icon(
+                                  Icons.photo_outlined,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                            )
+                          : Image.file(
+                              File(firstPhoto.filePath),
+                              height: 120,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) => Container(
+                                height: 120,
+                                color: AppTheme.background,
+                                child: const Icon(
+                                  Icons.broken_image_outlined,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                            ),
                     ),
                   if (firstMemo != null)
                     Text(

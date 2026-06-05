@@ -8,7 +8,6 @@ import '../../data/local/database.dart';
 import '../../data/local/daos/record_dao.dart';
 import '../../widgets/brand_header.dart';
 import '../../widgets/donut_progress.dart';
-import '../../widgets/mascot_widget.dart';
 import 'event_list_notifier.dart';
 
 /// ホーム（イベント一覧）画面（Android: EventListScreen / EventListViewModel 相当）。
@@ -31,9 +30,14 @@ class EventListScreen extends ConsumerWidget {
       }
     });
 
-    // 達成率: 記録ありのイベント / 全イベント
-    final totalEvents = state.events.length;
-    final eventsWithRecords = state.events.where((e) {
+    // 今日のイベントだけに絞って達成率を計算する。
+    final now = DateTime.now();
+    final todayEvents = state.events.where((e) {
+      final d = DateTime.fromMillisecondsSinceEpoch(e.startTime);
+      return d.year == now.year && d.month == now.month && d.day == now.day;
+    }).toList();
+    final totalEvents = todayEvents.length;
+    final eventsWithRecords = todayEvents.where((e) {
       final c = state.countFor(e.eventId);
       return c.photoCount + c.memoCount > 0;
     }).length;
@@ -197,61 +201,79 @@ class _TodaySummaryCard extends StatelessWidget {
               children: [
                 const Text(
                   '今日の記録',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 13,
-                  ),
+                  style: TextStyle(color: Colors.white70, fontSize: 13),
                 ),
                 const SizedBox(height: AppTheme.spacingXs),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      '$eventsWithRecords',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 40,
-                        fontWeight: FontWeight.w700,
-                      ),
+                if (totalEvents == 0)
+                  const Text(
+                    '今日の予定なし',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
                     ),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Text(
-                        ' / $totalEvents イベント',
+                  )
+                else
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '$eventsWithRecords',
                         style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 13,
+                          color: Colors.white,
+                          fontSize: 40,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                    ),
-                  ],
-                ),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          ' / $totalEvents 件',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 const SizedBox(height: AppTheme.spacingSm),
                 Text(
-                  totalEvents == 0 ? 'イベントを同期しましょう' : '記録のあるイベント',
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 12,
-                  ),
+                  totalEvents == 0
+                      ? 'カレンダーを同期してください'
+                      : '記録済みイベント',
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
                 ),
               ],
             ),
           ),
-          // 中: ドーナツ
-          DonutProgress(
-            value: progress,
-            size: 100,
-            color: Colors.white,
-            backgroundColor: Colors.white24,
-            centerTextStyle: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
+          // ドーナツ（今日のイベントがある場合のみ）
+          if (totalEvents > 0)
+            DonutProgress(
+              value: progress,
+              size: 100,
               color: Colors.white,
+              backgroundColor: Colors.white24,
+              centerTextStyle: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
+            )
+          else
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.calendar_today_outlined,
+                color: Colors.white54,
+                size: 32,
+              ),
             ),
-          ),
-          const SizedBox(width: AppTheme.spacingSm),
-          // 右: マスコット
-          const MascotWidget(size: 72),
         ],
       ),
     );

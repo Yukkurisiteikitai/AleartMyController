@@ -155,76 +155,35 @@ class _ScaffoldWithNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: navigationShell,
+      // 突発記録ボタン: Material3 NavigationBar との共存のため endFloat に配置。
+      // TODO(P3/dashboard): 下書き作成ダイアログを挟む。今は直接 /dashboard へ。
       floatingActionButton: FloatingActionButton(
-        // 突発下書き開始（Android: 中央 FAB → 下書きダイアログ → ダッシュボード）。
-        // TODO(P3/dashboard): 下書き作成ダイアログを挟む。今は直接 /dashboard へ。
         onPressed: () => context.push('/dashboard'),
         tooltip: '突発記録を開始',
         child: const Icon(Icons.add),
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      bottomNavigationBar: BottomAppBar(
-        shape: const CircularNotchedRectangle(),
-        notchMargin: 6,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _NavButton(
-              icon: Icons.home_outlined,
-              label: 'ホーム',
-              selected: navigationShell.currentIndex == 0,
-              onTap: () => _goBranch(0),
-            ),
-            const SizedBox(width: 48), // 中央 FAB のためのスペース
-            _NavButton(
-              icon: Icons.history,
-              label: '履歴',
-              selected: navigationShell.currentIndex == 1,
-              onTap: () => _goBranch(1),
-            ),
-            _NavButton(
-              icon: Icons.bar_chart_outlined,
-              label: '分析',
-              selected: navigationShell.currentIndex == 2,
-              onTap: () => _goBranch(2),
-            ),
-          ],
-        ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: navigationShell.currentIndex,
+        onDestinationSelected: _goBranch,
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home_rounded),
+            label: 'ホーム',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.calendar_month_outlined),
+            selectedIcon: Icon(Icons.calendar_month_rounded),
+            label: '履歴',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.bar_chart_outlined),
+            selectedIcon: Icon(Icons.bar_chart_rounded),
+            label: '分析',
+          ),
+        ],
       ),
     );
   }
 }
 
-class _NavButton extends StatelessWidget {
-  const _NavButton({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = selected
-        ? Theme.of(context).colorScheme.primary
-        : Theme.of(context).colorScheme.onSurfaceVariant;
-    return Expanded(
-      child: InkWell(
-        onTap: onTap,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: color),
-            Text(label, style: TextStyle(color: color, fontSize: 11)),
-          ],
-        ),
-      ),
-    );
-  }
-}

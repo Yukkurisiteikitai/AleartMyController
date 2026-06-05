@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -270,16 +272,13 @@ class _PhotoThumbnail extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          if (filePath != null)
-            Image.asset(
-              filePath!,
+          if (filePath != null && !kIsWeb)
+            Image.file(
+              File(filePath!),
               fit: BoxFit.cover,
               errorBuilder: (_, _, _) => Container(
                 color: AppTheme.primary.withValues(alpha: 0.1),
-                child: const Icon(
-                  Icons.photo_outlined,
-                  color: AppTheme.primary,
-                ),
+                child: const Icon(Icons.photo_outlined, color: AppTheme.primary),
               ),
             )
           else
