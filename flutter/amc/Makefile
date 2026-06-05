@@ -19,7 +19,14 @@ run-web: gen-env
 	flutter run -d chrome --dart-define-from-file=$(DART_DEFINES)
 
 run-android: gen-env
-	flutter run -d 3B171FDJH0039F --dart-define-from-file=$(DART_DEFINES)
+	@DEVICE=$$(flutter devices --machine 2>/dev/null | python3 -c "\
+import json,sys; \
+devs=[d for d in json.load(sys.stdin) \
+      if 'android' in d.get('targetPlatform','') and not d.get('emulator',False)]; \
+print(devs[0]['id'] if devs else '')"); \
+if [ -z "$$DEVICE" ]; then echo "エラー: 実機 Android デバイスが見つかりません。接続を確認してください。"; exit 1; fi; \
+echo "▶ Android デバイス: $$DEVICE"; \
+flutter run -d $$DEVICE --dart-define-from-file=$(DART_DEFINES)
 
 build-apk: gen-env
 	flutter build apk --debug --dart-define-from-file=$(DART_DEFINES)
