@@ -1,4 +1,5 @@
 import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:googleapis/calendar/v3.dart' as gcal;
 import 'package:googleapis_auth/googleapis_auth.dart' show AuthClient;
 import 'package:google_sign_in/google_sign_in.dart';
@@ -39,8 +40,22 @@ class AuthRepository {
 
   /// Google サインイン → Supabase サインイン → profiles upsert。
   /// 失敗時は例外を投げる（呼び出し元で catch してエラー表示する）。
+  ///
+  /// Web: signInWithOAuth（nonce をサーバー側で完結・ページリダイレクト）。
+  /// Mobile: google_sign_in → signInWithIdToken（GIS 非使用で nonce 問題なし）。
   Future<void> signInWithSupabase() async {
     final supabase = _requireClient();
+
+    if (kIsWeb) {
+      // Web は GIS が id_token に nonce を自動埋め込むため signInWithIdToken では
+      // nonce 不一致エラーが発生する。OAuth リダイレクトフローで回避。
+      await supabase.auth.signInWithOAuth(
+        OAuthProvider.google,
+        redirectTo: Uri.base.origin,
+      );
+      return;
+    }
+
     final account = _googleSignIn.currentUser ??
         await _googleSignIn.signInSilently() ??
         await _googleSignIn.signIn();

@@ -19,7 +19,7 @@ run-web: gen-env
 	flutter run -d chrome --dart-define-from-file=$(DART_DEFINES)
 
 run-android: gen-env
-	flutter run -d android --dart-define-from-file=$(DART_DEFINES)
+	flutter run -d 3B171FDJH0039F --dart-define-from-file=$(DART_DEFINES)
 
 build-apk: gen-env
 	flutter build apk --debug --dart-define-from-file=$(DART_DEFINES)
