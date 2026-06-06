@@ -1,7 +1,7 @@
 import 'dart:io' if (dart.library.html) '../core/_stub_io.dart';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -53,9 +53,17 @@ class AmcAttachmentUploadWorker {
     await attachmentDao.markUploading(att.attachmentId);
     try {
       if (kIsWeb) {
-        // Web では localUri が Blob URL になるため File 経由の読み込みは不可。
-        // TODO(web): IndexedDB から Blob を取得する方針（後フェーズ）。
-        await attachmentDao.markFailed(att.attachmentId, errorCode: 'WEB_FILE_READ_UNSUPPORTED');
+        // Web: localUri はブラウザセッション内有効な blob URL。XFile 経由でバイト取得してアップロード。
+        final xfile = XFile(att.localUri);
+        final bytes = await xfile.readAsBytes();
+        final ext = _extFromMime(att.mimeType);
+        final storagePath = '$userId/${att.draftRecordId}/${att.attachmentId}.$ext';
+        await client.storage.from(_bucket).uploadBinary(
+          storagePath,
+          bytes,
+          fileOptions: FileOptions(contentType: att.mimeType),
+        );
+        await attachmentDao.markReady(att.attachmentId, storagePath);
         return;
       }
       final file = File(_localPath(att.localUri));
@@ -63,7 +71,7 @@ class AmcAttachmentUploadWorker {
         await attachmentDao.markFailed(att.attachmentId, errorCode: 'FILE_NOT_FOUND');
         return;
       }
-      final bytes = Uint8List.fromList(await file.readAsBytes());
+      final bytes = await file.readAsBytes();
       final ext = _extFromMime(att.mimeType);
       final storagePath = '$userId/${att.draftRecordId}/${att.attachmentId}.$ext';
       await client.storage.from(_bucket).uploadBinary(

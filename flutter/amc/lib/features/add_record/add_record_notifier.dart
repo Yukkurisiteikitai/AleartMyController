@@ -145,15 +145,9 @@ class AddRecordNotifier extends Notifier<AddRecordState> {
   Future<void> addPhotoFromGallery() =>
       _pickAndAddPhoto(ImageSource.gallery);
 
-  // TODO(web): 写真パスは Blob/IndexedDB 方針（後フェーズ）— Web では File 経由のローカルパスが使えない。
   Future<void> _pickAndAddPhoto(ImageSource source) async {
     final event = state.event;
     if (event == null || state.isBusy) return;
-
-    if (kIsWeb) {
-      state = state.copyWith(errorMessage: '写真機能は Web では未対応です（後フェーズで Blob 方針に切り替え）');
-      return;
-    }
 
     state = state.copyWith(isBusy: true, errorMessage: null);
     try {
@@ -167,16 +161,22 @@ class AddRecordNotifier extends Notifier<AddRecordState> {
         return;
       }
 
-      // §5.3: 2048px / JPEG 85% に圧縮して documents ディレクトリへ保存
-      final compressedPath = await _compressAndSave(picked.path);
+      final String filePath;
+      if (kIsWeb) {
+        // Web: flutter_image_compress 非対応 / File 非対応 → blob URL をそのまま使用
+        filePath = picked.path;
+      } else {
+        // §5.3: 2048px / JPEG 85% に圧縮して documents ディレクトリへ保存
+        filePath = await _compressAndSave(picked.path);
+      }
 
       // ローカル DB に保存（record + photo を 1 トランザクション、§9）
       await ref
           .read(recordRepositoryProvider)
-          .addPhotoRecord(event, compressedPath);
+          .addPhotoRecord(event, filePath);
 
       // クラウド同期キュー登録（§9: findOrCreate → getOrCreateDraft → queueAttachment）
-      await _enqueuePhotoForSync(event, compressedPath);
+      await _enqueuePhotoForSync(event, filePath);
 
       state = state.copyWith(isBusy: false);
     } catch (e) {

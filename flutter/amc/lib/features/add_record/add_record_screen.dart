@@ -272,15 +272,25 @@ class _PhotoThumbnail extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          if (filePath != null && !kIsWeb)
-            Image.file(
-              File(filePath!),
-              fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => Container(
-                color: AppTheme.primary.withValues(alpha: 0.1),
-                child: const Icon(Icons.photo_outlined, color: AppTheme.primary),
-              ),
-            )
+          if (filePath != null)
+            kIsWeb
+                ? Image.network(
+                    filePath!,
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    height: double.infinity,
+                    errorBuilder: (_, __, ___) => const Icon(Icons.photo_outlined, color: AppTheme.primary), // ignore: unnecessary_underscores
+                  )
+                : Image.file(
+                    File(filePath!),
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    height: double.infinity,
+                    errorBuilder: (_, __, ___) => Container( // ignore: unnecessary_underscores
+                      color: AppTheme.primary.withValues(alpha: 0.1),
+                      child: const Icon(Icons.photo_outlined, color: AppTheme.primary),
+                    ),
+                  )
           else
             Container(
               color: AppTheme.primary.withValues(alpha: 0.1),
