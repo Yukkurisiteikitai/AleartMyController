@@ -272,13 +272,9 @@ class AddRecordNotifier extends Notifier<AddRecordState> {
 
   final SpeechToText _stt = SpeechToText();
 
-  /// 音声認識を開始する。
+  /// 音声認識を開始する。Web では Web Speech API（Chrome/Edge のみ対応）を使用する。
   Future<void> startVoiceInput() async {
     if (state.isListening) return;
-    if (kIsWeb) {
-      state = state.copyWith(errorMessage: '音声認識は Web では未対応です');
-      return;
-    }
     final available = await _stt.initialize(
       onError: (e) => state = state.copyWith(
         isListening: false,
@@ -286,7 +282,7 @@ class AddRecordNotifier extends Notifier<AddRecordState> {
       ),
     );
     if (!available) {
-      state = state.copyWith(errorMessage: '音声認識が利用できません');
+      state = state.copyWith(errorMessage: '音声認識が利用できません（Chrome/Edge をお試しください）');
       return;
     }
     state = state.copyWith(isListening: true, voiceText: '');
@@ -294,7 +290,7 @@ class AddRecordNotifier extends Notifier<AddRecordState> {
       onResult: (result) {
         state = state.copyWith(voiceText: result.recognizedWords);
       },
-      localeId: 'ja_JP',
+      listenOptions: SpeechListenOptions(localeId: 'ja_JP'),
     );
   }
 

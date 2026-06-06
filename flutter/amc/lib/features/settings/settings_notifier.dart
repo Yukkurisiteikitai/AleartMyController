@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -124,6 +125,14 @@ class SettingsNotifier extends Notifier<SettingsState> {
     final isSignedIn =
         ref.read(authRepositoryProvider).isSupabaseAuthenticated();
     if (isSignedIn) Future.microtask(syncNow);
+
+    // Web 版: アプリを開いている間は 5 分ごとに Cloud→Local pull を実行する。
+    if (kIsWeb) {
+      final periodicSub = Stream.periodic(const Duration(minutes: 5))
+          .listen((_) => syncNow());
+      ref.onDispose(periodicSub.cancel);
+    }
+
     return SettingsState(isSignedIn: isSignedIn);
   }
 

@@ -475,41 +475,39 @@ class _MemoInputArea extends StatelessWidget {
           const SizedBox(height: AppTheme.spacingMd),
           Row(
             children: [
-              // 音声ボタン（Webでは非対応のため非表示）
-              if (!kIsWeb) ...[
-                OutlinedButton.icon(
-                  onPressed: state.isBusy
-                      ? null
-                      : () {
-                          if (state.isListening) {
-                            notifier.stopVoiceInputAndSave();
-                          } else {
-                            notifier.startVoiceInput();
-                          }
-                        },
-                  icon: Icon(
-                    state.isListening
-                        ? Icons.stop_circle_outlined
-                        : Icons.mic_outlined,
-                    size: 18,
-                  ),
-                  label: Text(state.isListening ? '停止して保存' : '音声メモ'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor:
+              // 音声ボタン（Web: Chrome/Edge のみ対応）
+              OutlinedButton.icon(
+                onPressed: state.isBusy
+                    ? null
+                    : () {
+                        if (state.isListening) {
+                          notifier.stopVoiceInputAndSave();
+                        } else {
+                          notifier.startVoiceInput();
+                        }
+                      },
+                icon: Icon(
+                  state.isListening
+                      ? Icons.stop_circle_outlined
+                      : Icons.mic_outlined,
+                  size: 18,
+                ),
+                label: Text(state.isListening ? '停止して保存' : '音声メモ'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor:
+                      state.isListening ? Colors.red : AppTheme.primary,
+                  side: BorderSide(
+                    color:
                         state.isListening ? Colors.red : AppTheme.primary,
-                    side: BorderSide(
-                      color:
-                          state.isListening ? Colors.red : AppTheme.primary,
-                    ),
                   ),
                 ),
-                if (state.isListening) ...[
-                  const SizedBox(width: AppTheme.spacingSm),
-                  TextButton(
-                    onPressed: notifier.cancelVoiceInput,
-                    child: const Text('キャンセル'),
-                  ),
-                ],
+              ),
+              if (state.isListening) ...[
+                const SizedBox(width: AppTheme.spacingSm),
+                TextButton(
+                  onPressed: notifier.cancelVoiceInput,
+                  child: const Text('キャンセル'),
+                ),
               ],
               const Spacer(),
               // 送信ボタン（Rowの中に収まるコンパクトサイズ）
