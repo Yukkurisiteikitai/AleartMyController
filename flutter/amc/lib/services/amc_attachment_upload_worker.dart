@@ -72,7 +72,7 @@ class AmcAttachmentUploadWorker {
         await attachmentDao.markFailed(att.attachmentId, errorCode: 'FILE_NOT_FOUND');
         return;
       }
-      final bytes = await file.readAsBytes();
+      final bytes = Uint8List.fromList(await file.readAsBytes());
       final ext = _extFromMime(att.mimeType);
       final storagePath = '$userId/${att.draftRecordId}/${att.attachmentId}.$ext';
       await client.storage.from(_bucket).uploadBinary(
