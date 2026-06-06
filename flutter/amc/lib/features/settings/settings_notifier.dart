@@ -114,6 +114,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
         final isSignedIn =
             ref.read(authRepositoryProvider).isSupabaseAuthenticated();
         state = state.copyWith(isSignedIn: isSignedIn, signInError: null);
+        if (isSignedIn) syncNow();
       });
     });
 
@@ -122,6 +123,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
 
     final isSignedIn =
         ref.read(authRepositoryProvider).isSupabaseAuthenticated();
+    if (isSignedIn) Future.microtask(syncNow);
     return SettingsState(isSignedIn: isSignedIn);
   }
 

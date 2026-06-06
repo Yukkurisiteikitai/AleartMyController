@@ -55,6 +55,7 @@ final recordRepositoryProvider = Provider<RecordRepository>(
     observationEventRepository:
         ref.watch(observationEventRepositoryProvider),
     amcDraftDao: ref.watch(amcDraftDaoProvider),
+    storageRepository: ref.watch(amcStorageRepositoryProvider),
   ),
 );
 

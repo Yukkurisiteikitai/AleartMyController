@@ -1,6 +1,10 @@
 // 名前付き引数 + private フィールドのため initializing formal は使えない（言語仕様）。
 // ignore_for_file: prefer_initializing_formals
+import 'dart:io';
+
 import 'package:drift/drift.dart' show Value;
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/content_policy.dart';
@@ -11,6 +15,7 @@ import '../local/daos/photo_dao.dart';
 import '../local/daos/record_dao.dart';
 import '../local/database.dart';
 import '../local/tables.dart';
+import 'amc_storage_repository.dart';
 import 'observation_event_repository.dart';
 
 /// 記録（写真・メモ）の追加と監視（Android: RecordRepository 相当）。
@@ -22,12 +27,14 @@ class RecordRepository {
     required MemoDao memoDao,
     required ObservationEventRepository observationEventRepository,
     required AmcDraftDao amcDraftDao,
+    AmcStorageRepository? storageRepository,
   })  : _db = db,
         _recordDao = recordDao,
         _photoDao = photoDao,
         _memoDao = memoDao,
         _obsRepo = observationEventRepository,
-        _draftDao = amcDraftDao;
+        _draftDao = amcDraftDao,
+        _storageRepo = storageRepository;
 
   final AppDatabase _db;
   final RecordDao _recordDao;
@@ -35,6 +42,7 @@ class RecordRepository {
   final MemoDao _memoDao;
   final ObservationEventRepository _obsRepo;
   final AmcDraftDao _draftDao;
+  final AmcStorageRepository? _storageRepo;
 
   // ---- 監視（呼び出し側は引き続き Event.eventId を渡せる）----
 
@@ -146,8 +154,9 @@ class RecordRepository {
         endTime: createdAtMillis,
       );
 
+      int localRecordId = 0;
       await _db.transaction(() async {
-        final recordId = await _recordDao.insertRecord(
+        localRecordId = await _recordDao.insertRecord(
           RecordsCompanion.insert(
             obsEventId: obsEventId,
             recordTime: createdAtMillis,
@@ -156,7 +165,7 @@ class RecordRepository {
         );
         await _memoDao.insertMemo(
           MemosCompanion.insert(
-            recordId: recordId,
+            recordId: localRecordId,
             memoText: AmcContentPolicy.normalizeBodyForStorage(currentBody),
           ),
         );
@@ -170,6 +179,61 @@ class RecordRepository {
           ),
         );
       });
+
+      if (_storageRepo != null && !kIsWeb) {
+        await _pullAttachments(
+          client: client,
+          remoteRecordId: remoteId,
+          localRecordId: localRecordId,
+        );
+      }
     }
+  }
+
+  /// クラウドの amc_attachments から IMAGE を取得してローカルに保存し photos 行を追加する。
+  /// 個別の失敗は握りつぶし、テキスト記録は保持される。
+  Future<void> _pullAttachments({
+    required SupabaseClient client,
+    required String remoteRecordId,
+    required int localRecordId,
+  }) async {
+    try {
+      final attachments = await client
+          .from('amc_attachments')
+          .select('id, storage_path, mime_type')
+          .eq('record_id', remoteRecordId)
+          .eq('type', 'IMAGE')
+          .eq('status', 'READY') as List;
+
+      final dir = await getApplicationDocumentsDirectory();
+      final downloadsDir = Directory('${dir.path}/downloads');
+      if (!downloadsDir.existsSync()) downloadsDir.createSync(recursive: true);
+
+      for (final att in attachments) {
+        final storagePath = att['storage_path'] as String?;
+        if (storagePath == null) continue;
+        final mimeType = (att['mime_type'] as String?) ?? 'image/jpeg';
+        final attId = (att['id'] as String).replaceAll('-', '');
+        try {
+          final bytes = await _storageRepo!.downloadBytes(storagePath);
+          final ext = _imageExtension(mimeType);
+          final file = File('${downloadsDir.path}/cloud_$attId.$ext');
+          await file.writeAsBytes(bytes);
+          await _photoDao.insertPhoto(
+            PhotosCompanion.insert(recordId: localRecordId, filePath: file.path),
+          );
+        } catch (_) {
+          // 個別添付の失敗はスキップ
+        }
+      }
+    } catch (_) {
+      // 添付一覧取得失敗はスキップ（テキスト記録は保存済み）
+    }
+  }
+
+  String _imageExtension(String mimeType) {
+    final m = mimeType.toLowerCase();
+    if (m.contains('png')) return 'png';
+    return 'jpg';
   }
 }
