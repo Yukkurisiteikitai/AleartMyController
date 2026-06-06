@@ -1,4 +1,5 @@
 import 'dart:io' if (dart.library.html) '../core/_stub_io.dart';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
@@ -55,7 +56,7 @@ class AmcAttachmentUploadWorker {
       if (kIsWeb) {
         // Web: localUri はブラウザセッション内有効な blob URL。XFile 経由でバイト取得してアップロード。
         final xfile = XFile(att.localUri);
-        final bytes = await xfile.readAsBytes();
+        final bytes = Uint8List.fromList(await xfile.readAsBytes());
         final ext = _extFromMime(att.mimeType);
         final storagePath = '$userId/${att.draftRecordId}/${att.attachmentId}.$ext';
         await client.storage.from(_bucket).uploadBinary(
