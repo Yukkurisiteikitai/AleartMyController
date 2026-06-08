@@ -1,5 +1,4 @@
 supabase/secret
-flutter/
 *.iml
 .gradle
 /local.properties

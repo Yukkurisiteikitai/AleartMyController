@@ -1,0 +1,9 @@
+targets:
+  $default:
+    builders:
+      drift_dev:
+        options:
+          # Dart の camelCase getter を SQL では snake_case 列名にする（決定的にするため明示）。
+          # 新規 DB なので Android(Room) の camelCase 列名と一致させる必要はない。
+          # 生の customSelect SQL は snake_case 列名で書く。
+          case_from_dart_to_sql: snake_case

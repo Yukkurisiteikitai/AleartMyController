@@ -1,0 +1,282 @@
+diff --git a/flutter/amc/lib/core/amc_idempotency.dart b/flutter/amc/lib/core/amc_idempotency.dart
+index da56ec8..b18f0fd 100644
+--- a/flutter/amc/lib/core/amc_idempotency.dart
++++ b/flutter/amc/lib/core/amc_idempotency.dart
+@@ -1 +1,10 @@
+-// TODO(P2): AmcIdempotency 相当の idempotency_key 生成 helper を移植する。
++import 'package:uuid/uuid.dart';
++
++/// idempotency_key 生成 helper（Android: AmcIdempotency 相当）。
++class AmcIdempotency {
++  AmcIdempotency._();
++
++  static const _uuid = Uuid();
++
++  static String newKey() => _uuid.v4();
++}
+diff --git a/flutter/amc/lib/core/content_policy.dart b/flutter/amc/lib/core/content_policy.dart
+index 62b02b0..0ed1dc8 100644
+--- a/flutter/amc/lib/core/content_policy.dart
++++ b/flutter/amc/lib/core/content_policy.dart
+@@ -1,3 +1,46 @@
+-// TODO(P2): AmcContentPolicy の本文整形のみ移植する（クラウド送信ロジックは除く）。
+-// - normalizeBodyForStorage: 本文の NFC 正規化
+-// - buildCalendarMirrorBody: Google Calendar ミラー本文の生成
++import 'package:unorm_dart/unorm_dart.dart' as unorm;
++
++/// 本文整形ポリシー（Android: AmcContentPolicy の本文整形のみ移植、§2/§9）。
++/// クラウド送信ロジックは含まない。
++class AmcContentPolicy {
++  AmcContentPolicy._();
++
++  static const Set<String> allowedImageMimeTypes = {'image/jpeg'};
++  static const Set<String> allowedAudioMimeTypes = {'audio/mp4', 'audio/aac'};
++
++  static Set<String> get allowedAttachmentMimeTypes =>
++      {...allowedImageMimeTypes, ...allowedAudioMimeTypes};
++
++  static bool isAllowedAttachmentMime(String mimeType) =>
++      allowedAttachmentMimeTypes.contains(mimeType.toLowerCase());
++
++  /// 保存前の本文正規化（§9: NFC 正規化 + trim）。
++  static String normalizeBodyForStorage(String value) =>
++      unorm.nfc(value.trim());
++
++  /// Google Calendar description 用の軽量ミラー本文を構築する。
++  /// 長文時は先頭要約 + 参照 URL に退避する。
++  static String buildCalendarMirrorBody(
++    String currentBody, {
++    String? referenceUrl,
++    int maxDescriptionLength = 3000,
++    int summaryLength = 240,
++  }) {
++    final normalized = normalizeBodyForStorage(currentBody);
++    if (normalized.length <= maxDescriptionLength) return normalized;
++
++    final summary = normalized.substring(0, summaryLength).trimRight();
++    final fallbackUrl =
++        (referenceUrl != null && referenceUrl.isNotEmpty) ? referenceUrl : null;
++    final buffer = StringBuffer()
++      ..write(summary)
++      ..write('\n\n')
++      ..write('本文は YourselfLM で閲覧してください');
++    if (fallbackUrl != null) {
++      buffer
++        ..write('\n')
++        ..write(fallbackUrl);
++    }
++    return buffer.toString();
++  }
++}
+diff --git a/flutter/amc/lib/data/remote/google_calendar_api.dart b/flutter/amc/lib/data/remote/google_calendar_api.dart
+index e0fa973..442252e 100644
+--- a/flutter/amc/lib/data/remote/google_calendar_api.dart
++++ b/flutter/amc/lib/data/remote/google_calendar_api.dart
+@@ -1,2 +1,66 @@
+-// TODO(P2): googleapis CalendarApi のラッパ（migration_plan.md §5.1）。
+-// events.list / insert / patch / get、終日イベントの date→dateTime フォールバック。
++import 'package:googleapis/calendar/v3.dart' as gcal;
++
++import '../repository/auth_repository.dart';
++
++/// googleapis CalendarApi のラッパ（Android: GoogleCalendarApi 相当、§5.1）。
++class GoogleCalendarApi {
++  GoogleCalendarApi(this._auth);
++
++  final AuthRepository _auth;
++
++  static const String _calendarId = 'primary';
++
++  Future<gcal.CalendarApi> _api() async {
++    final client = await _auth.calendarAuthClient();
++    if (client == null) {
++      throw StateError('Google Calendar に未サインインです');
++    }
++    return gcal.CalendarApi(client);
++  }
++
++  /// 期間内のイベントを開始時刻順で取得する（単一イベント展開）。
++  Future<gcal.Events> listEvents({
++    required DateTime timeMin,
++    required DateTime timeMax,
++  }) async {
++    final api = await _api();
++    return api.events.list(
++      _calendarId,
++      timeMin: timeMin.toUtc(),
++      timeMax: timeMax.toUtc(),
++      singleEvents: true,
++      orderBy: 'startTime',
++    );
++  }
++
++  Future<gcal.Event> getEvent(String eventId) async {
++    final api = await _api();
++    return api.events.get(_calendarId, eventId);
++  }
++
++  Future<gcal.Event> insertEvent({
++    required String summary,
++    String? description,
++    required int startMillis,
++    required int endMillis,
++  }) async {
++    final api = await _api();
++    final event = gcal.Event()
++      ..summary = summary
++      ..description = description
++      ..start = (gcal.EventDateTime()
++        ..dateTime = DateTime.fromMillisecondsSinceEpoch(startMillis).toUtc())
++      ..end = (gcal.EventDateTime()
++        ..dateTime = DateTime.fromMillisecondsSinceEpoch(endMillis).toUtc());
++    return api.events.insert(event, _calendarId);
++  }
++
++  Future<gcal.Event> patchEvent(
++    String eventId, {
++    String? description,
++  }) async {
++    final api = await _api();
++    final patch = gcal.Event()..description = description;
++    return api.events.patch(patch, _calendarId, eventId);
++  }
++}
+diff --git a/flutter/amc/lib/providers/repository_providers.dart b/flutter/amc/lib/providers/repository_providers.dart
+index 8eaae4a..1d5da6e 100644
+--- a/flutter/amc/lib/providers/repository_providers.dart
++++ b/flutter/amc/lib/providers/repository_providers.dart
+@@ -1,7 +1,70 @@
+-// TODO(P2): 各 Repository の Provider をここで公開する（FROZEN_CONTRACT の出力元）。
+-//   - observationEventRepositoryProvider
+-//   - recordRepositoryProvider
+-//   - eventRepositoryProvider
+-//   - authRepositoryProvider
+-//   - amcDraftRepositoryProvider
+-//   - amcStorageRepositoryProvider
++import 'package:flutter_riverpod/flutter_riverpod.dart';
++import 'package:google_sign_in/google_sign_in.dart';
++
++import '../data/remote/google_calendar_api.dart';
++import '../data/repository/amc_draft_repository.dart';
++import '../data/repository/amc_storage_repository.dart';
++import '../data/repository/amc_work_scheduler.dart';
++import '../data/repository/auth_repository.dart';
++import '../data/repository/event_repository.dart';
++import '../data/repository/observation_event_repository.dart';
++import '../data/repository/record_repository.dart';
++import 'database_providers.dart';
++import 'supabase_providers.dart';
++
++final googleSignInProvider = Provider<GoogleSignIn>(
++  (ref) => GoogleSignIn(scopes: AuthRepository.defaultScopes),
++);
++
++final authRepositoryProvider = Provider<AuthRepository>(
++  (ref) => AuthRepository(
++    ref.watch(googleSignInProvider),
++    ref.watch(supabaseClientProvider),
++  ),
++);
++
++final googleCalendarApiProvider = Provider<GoogleCalendarApi>(
++  (ref) => GoogleCalendarApi(ref.watch(authRepositoryProvider)),
++);
++
++final observationEventRepositoryProvider =
++    Provider<ObservationEventRepository>(
++  (ref) => ObservationEventRepository(ref.watch(observationEventDaoProvider)),
++);
++
++final recordRepositoryProvider = Provider<RecordRepository>(
++  (ref) => RecordRepository(
++    db: ref.watch(appDatabaseProvider),
++    recordDao: ref.watch(recordDaoProvider),
++    photoDao: ref.watch(photoDaoProvider),
++    memoDao: ref.watch(memoDaoProvider),
++    observationEventRepository:
++        ref.watch(observationEventRepositoryProvider),
++  ),
++);
++
++final eventRepositoryProvider = Provider<EventRepository>(
++  (ref) => EventRepository(
++    eventDao: ref.watch(eventDaoProvider),
++    observationEventDao: ref.watch(observationEventDaoProvider),
++    calendarApi: ref.watch(googleCalendarApiProvider),
++  ),
++);
++
++/// P4 で workmanager 実装に override する（§4.2/§4.3）。
++final amcWorkSchedulerProvider = Provider<AmcWorkScheduler>(
++  (ref) => const NoopAmcWorkScheduler(),
++);
++
++final amcDraftRepositoryProvider = Provider<AmcDraftRepository>(
++  (ref) => AmcDraftRepository(
++    db: ref.watch(appDatabaseProvider),
++    draftDao: ref.watch(amcDraftDaoProvider),
++    attachmentDao: ref.watch(amcAttachmentDaoProvider),
++    scheduler: ref.watch(amcWorkSchedulerProvider),
++  ),
++);
++
++final amcStorageRepositoryProvider = Provider<AmcStorageRepository>(
++  (ref) => AmcStorageRepository(ref.watch(supabaseClientProvider)),
++);
+diff --git a/flutter/amc/pubspec.lock b/flutter/amc/pubspec.lock
+index d4be115..5a69a4c 100644
+--- a/flutter/amc/pubspec.lock
++++ b/flutter/amc/pubspec.lock
+@@ -601,7 +601,7 @@ packages:
+     source: hosted
+     version: "16.0.0"
+   googleapis_auth:
+-    dependency: transitive
++    dependency: "direct main"
+     description:
+       name: googleapis_auth
+       sha256: "2a8895c3885197f96bb2fd91ee0ae77b53ff3874c7b1f1eadb6566248e880958"
+@@ -1429,6 +1429,14 @@ packages:
+       url: "https://pub.dev"
+     source: hosted
+     version: "1.4.0"
++  unorm_dart:
++    dependency: "direct main"
++    description:
++      name: unorm_dart
++      sha256: "0c69186b03ca6addab0774bcc0f4f17b88d4ce78d9d4d8f0619e30a99ead58e7"
++      url: "https://pub.dev"
++    source: hosted
++    version: "0.3.2"
+   url_launcher:
+     dependency: transitive
+     description:
+@@ -1493,6 +1501,14 @@ packages:
+       url: "https://pub.dev"
+     source: hosted
+     version: "3.1.5"
++  uuid:
++    dependency: "direct main"
++    description:
++      name: uuid
++      sha256: "1fef9e8e11e2991bb773070d4656b7bd5d850967a2456cfc83cf47925ba79489"
++      url: "https://pub.dev"
++    source: hosted
++    version: "4.5.3"
+   vector_math:
+     dependency: transitive
+     description:
+diff --git a/flutter/amc/pubspec.yaml b/flutter/amc/pubspec.yaml
+index 167640f..4a75072 100644
+--- a/flutter/amc/pubspec.yaml
++++ b/flutter/amc/pubspec.yaml
+@@ -57,6 +57,9 @@ dependencies:
+   synchronized: ^3.4.1
+   rxdart: ^0.28.0
+   intl: ^0.20.2
++  uuid: ^4.5.3
++  unorm_dart: ^0.3.2
++  googleapis_auth: ^2.3.1
+ 
+ dev_dependencies:
+   flutter_test:
